@@ -124,31 +124,67 @@ ggtern::grid.arrange(grobs = cox_direction_plots, ncol = 4)
 
 
 
+get_scheffe_order_2 = function(X){
+  q = ncol(X)
+  n = nrow(X)
+  n_col_X_m = q + (q-1)*q/2
+  X_m = matrix(rep(NA_real_, n_col_X_m*n), nrow = n)
+  X_m[,1:q] = X
+  
+  k = q
+  for(i in 1:(q-1)){
+    for(j in (i+1):q){
+      # cat("i = ", i, ", j = ", j, "\n")
+      k = k+1
+      X_m[,k] = X[,i]*X[,j]
+    }  
+  }
+  return(X_m)
+}
+
+
+get_scheffe_order_3 = function(X){
+  q = ncol(X)
+  n = nrow(X)
+  X_m = get_scheffe_order_2(X)
+  for(i in 1:(q-2)){
+    for(j in (i+1):(q-1)){
+      for(k in (j+1):q){
+        # cat("i = ", i, ", j = ", j, "\n")
+        # not the most efficient, but works
+        X_m = cbind(X_m, X[,i]*X[,j]*X[,k])
+      }  
+    }
+  }
+  return(X_m)
+}
+
+
 get_scheffe = function(X, order = 1){
   stopifnot(order %in% 1:3)
   if(order == 1)  X_m = X
   else{
     if(order == 2){
-      q = ncol(X)
-      n = nrow(X)
-      n_col_X_m = q + (q-1)*q/2
-      X_m = matrix(rep(NA_real_, n_col_X_m*n), nrow = n)
-      X_m[,1:q] = X
+      # q = ncol(X)
+      # n = nrow(X)
+      # n_col_X_m = q + (q-1)*q/2
+      # X_m = matrix(rep(NA_real_, n_col_X_m*n), nrow = n)
+      # X_m[,1:q] = X
+      # 
+      # k = q
+      # for(i in 1:(q-1)){
+      #   for(j in (i+1):q){
+      #     # cat("i = ", i, ", j = ", j, "\n")
+      #     k = k+1
+      #     X_m[,k] = X[,i]*X[,j]
+      #   }  
+      # }
       
-      k = q
-      for(i in 1:(q-1)){
-        for(j in (i+1):q){
-          # cat("i = ", i, ", j = ", j, "\n")
-          k = k+1
-          X_m[,k] = X[,i]*X[,j]
-        }  
-      }
-      
+      X_m = get_scheffe_order_2(X)
       
     } else {
       # order = 3
-      # TODO
-      X_m = X
+      X_m = get_scheffe_order_3(X)
     }
   }
   return(X_m)
