@@ -43,16 +43,29 @@ compute_cox_direction = function(x, comp, n_points = 11){
   for(n in seq_along(cox_direction_aux3)){
     # recompute proportions:
     for(j in setdiff(1:q, i)){
-      cox_direction[n, j] = x[j] - deltas[n]*x[j]/(1 - x[i] + 1e-16)
+      # In case it's a corner case, i.e., x[i] = 1
+      if(abs(1 - x[i]) < 1e-16) res = (1 - cox_direction[n, i])/(q-1)
+      else{
+        res = x[j] - deltas[n]*x[j]/(1 - x[i])
+      }
+      cox_direction[n, j] = res
+    } # end j
+    
+    if(any(cox_direction[n, ] < -1e-10 | cox_direction[n, ] > 1 + 1e10)) {
+      stop("Error while computing Cox direction. ",
+           "Value out of bounds.\n", 
+           "Cox direction computed:\n\tc(", 
+           paste(cox_direction[n, ], collapse = ", "), ")")
     }
   }
+  cox_direction = unique(cox_direction)
   
-  return(unique(cox_direction))
+  return(cox_direction)
 }
 
 
 
-plot_cox_direction = function(x_in, comp = NULL){
+plot_cox_direction = function(x_in, comp = NULL, n_points = 3){
   # x_in: vector of length 3 that sums up to 1
   # comp: which component should be plotted. Can be a scalar or a vector
   library(dplyr)
@@ -65,7 +78,7 @@ plot_cox_direction = function(x_in, comp = NULL){
   
   # If component is null
   if(!is.null(comp) & length(comp) == 1){
-    out = compute_cox_direction(x_in, comp, 3) %>% 
+    out = compute_cox_direction(x_in, comp, n_points) %>% 
       as_tibble() %>% 
       set_names(c("x", "y", "z")) %>% 
       ggplot(aes(x, y, z)) +
@@ -100,28 +113,6 @@ plot_cox_direction = function(x_in, comp = NULL){
   
   return(out)
 }
-
-library(tidyverse)
-library(ggtern)
-
-x_in = c(0.4725440, 0.2627838, 0.2646722)
-plot_cox_direction(x_in, 1)
-plot_cox_direction(x_in, 1:3)
-
-
-# plot several Cox's directions for random designs
-random_designs = create_random_initial_design(8, q = 3)
-
-cox_direction_plots = lapply(1:nrow(random_designs), function(i){
-  return(plot_cox_direction(random_designs[i,], 1:3))
-})
-
-# Don't understand why the plots are not right when arranged in a grid with gridExtra
-# I need to use ggtern's own grid.arrange
-# https://stackoverflow.com/questions/42825983/issue-when-using-grid-arrange-with-ggtern-generated-plots
-# do.call("grid.arrange", c(cox_direction_plots, ncol = 4)) # This works with ggtern::grid.arrange
-ggtern::grid.arrange(grobs = cox_direction_plots, ncol = 4)
-
 
 
 get_scheffe_order_2 = function(X){
@@ -200,19 +191,26 @@ get_scheffe_D_efficiency = function(X, order = 1){
 
 
 
-coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, order = 1, max_it = 100, seed = NULL, X = NULL){
+
+coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 100, seed = NULL, X = NULL){
   
   if(is.null(X)){
     # If no initial design is provided, create a random starting design
     X = create_random_initial_design(n_runs, q, seed)
     
-  } else{
-    # Check that rows in X sum to 1
-    row_sums = apply(X, 1, sum)
-    if(sum(abs(row_sums - rep(1, n_runs)) > 1e-16) != n_runs){
-      stop("Rows in X must sum 1")
-    }
+  } 
+  
+  n_runs = nrow(X)
+  q = ncol(X)
+  
+  # Check that rows in X sum to 1
+  row_sums = apply(X, 1, sum)
+  
+  if(sum(abs(row_sums - rep(1, n_runs)) < 1e-10) != n_runs){
+    stop("Rows in X must sum 1")
   }
+  
+  
   
   if(!is.null(seed)) set.seed(seed)
   
@@ -296,49 +294,67 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, order = 1, max_it = 
 
 
 
+plot_result = function(res_alg){
+  # res_alg: output of a call to coord_ex_mixt() function
+  
+  out_plot = ggtern::grid.arrange(
+    res_alg$X_orig %>% 
+      as_tibble() %>% 
+      set_names(c("x", "y", "z")) %>% 
+      ggplot(aes(x, y, z)) +
+      geom_point() +
+      coord_tern() + 
+      theme_minimal() +
+      ggtitle(label = "",
+              subtitle = paste0("D-efficiency = ", round(res_alg$d_eff_orig, 3)))
+    ,
+    res_alg$X %>% 
+      as_tibble() %>% 
+      set_names(c("x", "y", "z")) %>% 
+      ggplot(aes(x, y, z)) +
+      coord_tern() + 
+      geom_point() +
+      theme_minimal() +
+      ggtitle(label = "",
+              subtitle = paste0("D-efficiency = ", round(res_alg$d_eff, 3)))
+    ,
+    ncol = 2
+  )
+  
+  return(out_plot) 
+}
 
-res_alg = coord_ex_mixt(9, q = 3, 100)
-
-ggtern::grid.arrange(
-  res_alg$X_orig %>% 
-    as_tibble() %>% 
-    set_names(c("x", "y", "z")) %>% 
-    ggplot(aes(x, y, z)) +
-    geom_point() +
-    coord_tern() + 
-    theme_minimal() ,
-  res_alg$X %>% 
-    as_tibble() %>% 
-    set_names(c("x", "y", "z")) %>% 
-    ggplot(aes(x, y, z)) +
-    coord_tern() + 
-    geom_point() +
-    theme_minimal() ,
-  ncol = 2
-)
 
 
+library(tidyverse)
+library(ggtern)
+
+x_in = c(0.4725440, 0.2627838, 0.2646722)
+plot_cox_direction(x_in, 1)
+plot_cox_direction(x_in, 1:3)
+
+
+# plot several Cox's directions for random designs
+# Don't understand why the plots are not right when arranged in a grid with gridExtra
+# I need to use ggtern's own grid.arrange
+# https://stackoverflow.com/questions/42825983/issue-when-using-grid-arrange-with-ggtern-generated-plots
+# do.call("grid.arrange", c(cox_direction_plots, ncol = 4)) # This works with ggtern::grid.arrange
+random_designs = create_random_initial_design(8, q = 3)
+
+cox_direction_plots = lapply(1:nrow(random_designs), function(i){
+  return(plot_cox_direction(random_designs[i,], 1:3))
+})
+
+ggtern::grid.arrange(grobs = cox_direction_plots, ncol = 4)
 
 
 
+# First degree
+res_alg = coord_ex_mixt(9, q = 3, n_cox_points = 100)
+plot_result(res_alg)
+
+
+# Second degree
 res_alg_order_2 = coord_ex_mixt(9, q = 3, 100, order = 2)
-
-ggtern::grid.arrange(
-  res_alg_order_2$X_orig %>% 
-    as_tibble() %>% 
-    set_names(c("x", "y", "z")) %>% 
-    ggplot(aes(x, y, z)) +
-    geom_point() +
-    coord_tern() + 
-    theme_minimal() ,
-  res_alg_order_2$X %>% 
-    as_tibble() %>% 
-    set_names(c("x", "y", "z")) %>% 
-    ggplot(aes(x, y, z)) +
-    coord_tern() + 
-    geom_point() +
-    theme_minimal() ,
-  ncol = 2
-)
-
+plot_result(res_alg_order_2)
 
