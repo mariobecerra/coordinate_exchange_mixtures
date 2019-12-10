@@ -123,6 +123,33 @@ cox_direction_plots = lapply(1:nrow(random_designs), function(i){
 ggtern::grid.arrange(grobs = cox_direction_plots, ncol = 4)
 
 
+
+get_scheffe = function(X, order = 1){
+  stopifnot(order %in% 1:3)
+  if(order == 1)  X_m = X
+  else{
+    if(order == 2){
+      # TODO
+      X_m = X
+    } else {
+      # order = 3
+      # TODO
+      X_m = X
+    }
+  }
+  return(X_m)
+}
+
+
+get_scheffe_D_efficiency = function(X, order = 1){
+  X_m = get_scheffe(X, order = order)
+  det_X_m = det(t(X_m) %*% X_m)
+  D_eff = det_X_m^(1/ncol(X_m))/nrow(X_m)
+  return(D_eff)
+}
+
+
+
 coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NULL){
   
   if(is.null(X)){
@@ -138,43 +165,57 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NUL
   }
   
   if(!is.null(seed)) set.seed(seed)
+  
+  # Design matrix
+  # Scheffé model of first order
+  # X_m = get_scheffe(X, order = 1)
+  # Scheffé model of second order
+  # X_m = get_scheffe(X, order = 2)
+  # Scheffé model of third order
+  # X_m = get_scheffe(X, order = 3)
+  
+  # D-efficiency of current design
+  d_eff_0 = get_scheffe_D_efficiency(X)
+  d_eff_best = d_eff_0
+  
   # Coordinate exchanges:
   
-  for(k in 1:nrow(X)){
+  for(k in 1:nrow(X_m)){
+    cat("k = ", k, "\n")
     for(i in 1:q){
+      cat("i = ", i, "\n")
+      
+      # The algorithm then evaluates the optimality criterion for a certain number of different designs, say k, obtained by replacing the original coordinate with k equidistant points on the Cox-effect direction line between the lower and upper limit.
       
       # get points from Cox's direction
       cox_direction = compute_cox_direction(X[k,], i, n_cox_points)
       
       # compute optimality criterion for points in Cox's direction
+      for(j in 1:nrow(cox_direction)){
+        cat("j = ", j, "\n")
+        
+        X_new = X
+        # replace point of Cox direction in original matrix
+        X_new[k,] = cox_direction[j,]
+        
+        # Get D-efficiency of new design
+        d_eff_j = get_scheffe_D_efficiency(X_new, order = 1)
+        
+        # If new D-efficiency is better, then keep the new one
+        if(d_eff_j > d_eff_best) {
+          d_eff_best = d_eff_j
+          X = X_new
+        }
+      } # end for Cox
       
-      
-      
-      
-    }
+    } # end for q
     
-  }
+  } # end for nrow
   
-  # for(k in 1:nrow(X)){
-  #   # Decide which column to change
-  #   i = sample(1:q, 1)
-  #   
-  #   # new value of xi:
-  #   x_new = runif(1)
-  #   
-  #   # Difference of new and old:
-  #   delta = x_new - X[k, i]
-  #   
-  #   # recompute proportions:
-  #   for(j in setdiff(1:q, i)){
-  #     X[k, j] = X[k, j] - delta*X[k, j]/(1 - X[k, i])
-  #   }
-  #   
-  #   # Change value of xi
-  #   X[k, i] = x_new
-  # }
-  
-  # The algorithm then evaluates the optimality criterion for a certain number of different designs, say k, obtained by replacing the original coordinate with k equidistant points on the Cox-effect direction line between the lower and upper limit.
+  return(list(
+    X = X,
+    d_eff = d_eff_best
+  ))
   
 }
 
