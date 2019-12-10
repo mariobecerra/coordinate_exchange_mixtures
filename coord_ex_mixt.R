@@ -43,11 +43,11 @@ compute_cox_direction = function(x, comp, n_points = 11){
   for(n in seq_along(cox_direction_aux3)){
     # recompute proportions:
     for(j in setdiff(1:q, i)){
-      cox_direction[n, j] = x[j] - deltas[n]*x[j]/(1 - x[i])
+      cox_direction[n, j] = x[j] - deltas[n]*x[j]/(1 - x[i] + 1e-16)
     }
   }
   
-  return(cox_direction)
+  return(unique(cox_direction))
 }
 
 
@@ -159,7 +159,7 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NUL
   } else{
     # Check that rows in X sum to 1
     row_sums = apply(X, 1, sum)
-    if(sum(row_sums == rep(1, n_runs)) != n_runs){
+    if(sum(abs(row_sums - rep(1, n_runs)) > 1e-16) != n_runs){
       stop("Rows in X must sum 1")
     }
   }
@@ -174,16 +174,18 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NUL
   # Scheffé model of third order
   # X_m = get_scheffe(X, order = 3)
   
+  X_orig = X
+  
   # D-efficiency of current design
   d_eff_0 = get_scheffe_D_efficiency(X)
   d_eff_best = d_eff_0
   
   # Coordinate exchanges:
   
-  for(k in 1:nrow(X_m)){
-    cat("k = ", k, "\n")
+  for(k in 1:nrow(X)){
+    # cat("k = ", k, "\n")
     for(i in 1:q){
-      cat("i = ", i, "\n")
+      # cat("i = ", i, "\n")
       
       # The algorithm then evaluates the optimality criterion for a certain number of different designs, say k, obtained by replacing the original coordinate with k equidistant points on the Cox-effect direction line between the lower and upper limit.
       
@@ -192,7 +194,7 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NUL
       
       # compute optimality criterion for points in Cox's direction
       for(j in 1:nrow(cox_direction)){
-        cat("j = ", j, "\n")
+        # cat("j = ", j, "\n")
         
         X_new = X
         # replace point of Cox direction in original matrix
@@ -213,7 +215,9 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NUL
   } # end for nrow
   
   return(list(
+    X_orig = X_orig,
     X = X,
+    d_eff_orig = d_eff_0,
     d_eff = d_eff_best
   ))
   
@@ -222,6 +226,23 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NUL
 
 
 
+res_alg = coord_ex_mixt(10, q = 3, n_cox_points)
 
-
+ggtern::grid.arrange(
+  res_alg$X_orig %>% 
+    as_tibble() %>% 
+    set_names(c("x", "y", "z")) %>% 
+    ggplot(aes(x, y, z)) +
+    geom_point() +
+    coord_tern() + 
+    theme_minimal() ,
+  res_alg$X %>% 
+    as_tibble() %>% 
+    set_names(c("x", "y", "z")) %>% 
+    ggplot(aes(x, y, z)) +
+    coord_tern() + 
+    geom_point() +
+    theme_minimal() ,
+  ncol = 2
+)
 
