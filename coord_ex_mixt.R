@@ -71,7 +71,7 @@ plot_cox_direction = function(x_in, comp = NULL){
       ggplot(aes(x, y, z)) +
       coord_tern() + 
       geom_path(linetype = "dashed") + 
-      theme_bw() +
+      theme_minimal() +
       geom_point(data = tibble(x = x_in[1], y = x_in[2], z = x_in[3]))
   } else{
     if(is.null(comp)) comp = 1:length(x_in)
@@ -87,14 +87,14 @@ plot_cox_direction = function(x_in, comp = NULL){
     # out = cox_dirs %>% 
     #   ggtern(aes(x, y, z)) + 
     #   geom_path(linetype = "dashed", aes(group = comp)) + 
-    #   theme_bw() +
+    #   theme_minimal() +
     #   geom_point(data = tibble(x = x_in[1], y = x_in[2], z = x_in[3]))
     
     out = cox_dirs %>% 
       ggplot(aes(x, y, z)) +
       coord_tern() + 
       geom_path(linetype = "dashed", aes(group = comp)) + 
-      theme_bw() +
+      theme_minimal() +
       geom_point(data = tibble(x = x_in[1], y = x_in[2], z = x_in[3]))
   }
   
@@ -129,8 +129,22 @@ get_scheffe = function(X, order = 1){
   if(order == 1)  X_m = X
   else{
     if(order == 2){
-      # TODO
-      X_m = X
+      q = ncol(X)
+      n = nrow(X)
+      n_col_X_m = q + (q-1)*q/2
+      X_m = matrix(rep(NA_real_, n_col_X_m*n), nrow = n)
+      X_m[,1:q] = X
+      
+      k = q
+      for(i in 1:(q-1)){
+        for(j in (i+1):q){
+          # cat("i = ", i, ", j = ", j, "\n")
+          k = k+1
+          X_m[,k] = X[,i]*X[,j]
+        }  
+      }
+      
+      
     } else {
       # order = 3
       # TODO
@@ -150,7 +164,7 @@ get_scheffe_D_efficiency = function(X, order = 1){
 
 
 
-coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NULL){
+coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, order = 1, max_it = 100, seed = NULL, X = NULL){
   
   if(is.null(X)){
     # If no initial design is provided, create a random starting design
@@ -177,48 +191,69 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NUL
   X_orig = X
   
   # D-efficiency of current design
-  d_eff_0 = get_scheffe_D_efficiency(X)
+  d_eff_0 = get_scheffe_D_efficiency(X, order = order)
   d_eff_best = d_eff_0
+  d_eff_aux = Inf
   
   # Coordinate exchanges:
-  
-  for(k in 1:nrow(X)){
-    # cat("k = ", k, "\n")
-    for(i in 1:q){
-      # cat("i = ", i, "\n")
-      
-      # The algorithm then evaluates the optimality criterion for a certain number of different designs, say k, obtained by replacing the original coordinate with k equidistant points on the Cox-effect direction line between the lower and upper limit.
-      
-      # get points from Cox's direction
-      cox_direction = compute_cox_direction(X[k,], i, n_cox_points)
-      
-      # compute optimality criterion for points in Cox's direction
-      for(j in 1:nrow(cox_direction)){
-        # cat("j = ", j, "\n")
-        
-        X_new = X
-        # replace point of Cox direction in original matrix
-        X_new[k,] = cox_direction[j,]
-        
-        # Get D-efficiency of new design
-        d_eff_j = get_scheffe_D_efficiency(X_new, order = 1)
-        
-        # If new D-efficiency is better, then keep the new one
-        if(d_eff_j > d_eff_best) {
-          d_eff_best = d_eff_j
-          X = X_new
-        }
-      } # end for Cox
-      
-    } # end for q
+  it = 0
+  while(it < max_it){
+    it = it + 1
+    cat("Iter: ", it, ", D-efficiency: ", d_eff_best, "\n")
+    # If there was no improvement in this iteration
+    if(abs(d_eff_aux - d_eff_best) < 1e-16) break
     
-  } # end for nrow
+    d_eff_aux = d_eff_best
+    
+    for(k in 1:nrow(X)){
+      # cat("k = ", k, "\n")
+      for(i in 1:q){
+        # cat("i = ", i, "\n")
+        
+        # The algorithm then evaluates the optimality criterion for a certain number of different designs, say k, obtained by replacing the original coordinate with k equidistant points on the Cox-effect direction line between the lower and upper limit.
+        
+        # get points from Cox's direction
+        cox_direction = compute_cox_direction(X[k,], i, n_cox_points)
+        
+        # compute optimality criterion for points in Cox's direction
+        for(j in 1:nrow(cox_direction)){
+          # cat("j = ", j, "\n")
+          
+          X_new = X
+          # replace point of Cox direction in original matrix
+          X_new[k,] = cox_direction[j,]
+          
+          # Get D-efficiency of new design
+          d_eff_j = get_scheffe_D_efficiency(X_new, order = order)
+          
+          # If new D-efficiency is better, then keep the new one
+          if(d_eff_j > d_eff_best) {
+            d_eff_best = d_eff_j
+            X = X_new
+          }
+        } # end for Cox
+        
+      } # end for q
+      
+    } # end for nrow
+    
+    
+  } # end while
+  
+  cat("\n")
+  cat("Original D-efficiency: ", d_eff_0)
+  cat("\n")
+  cat("Final D-efficiency: ", d_eff_best)
+  cat("\n")
+  cat("Number of iterations: ", it)
+  cat("\n")
   
   return(list(
     X_orig = X_orig,
     X = X,
     d_eff_orig = d_eff_0,
-    d_eff = d_eff_best
+    d_eff = d_eff_best,
+    n_iter = it
   ))
   
 }
@@ -226,7 +261,7 @@ coord_ex_mixt = function(n_runs, q = 3, n_cox_points = 100, seed = NULL, X = NUL
 
 
 
-res_alg = coord_ex_mixt(10, q = 3, n_cox_points)
+res_alg = coord_ex_mixt(9, q = 3, 100)
 
 ggtern::grid.arrange(
   res_alg$X_orig %>% 
@@ -245,4 +280,29 @@ ggtern::grid.arrange(
     theme_minimal() ,
   ncol = 2
 )
+
+
+
+
+
+res_alg_order_2 = coord_ex_mixt(9, q = 3, 100, order = 2)
+
+ggtern::grid.arrange(
+  res_alg_order_2$X_orig %>% 
+    as_tibble() %>% 
+    set_names(c("x", "y", "z")) %>% 
+    ggplot(aes(x, y, z)) +
+    geom_point() +
+    coord_tern() + 
+    theme_minimal() ,
+  res_alg_order_2$X %>% 
+    as_tibble() %>% 
+    set_names(c("x", "y", "z")) %>% 
+    ggplot(aes(x, y, z)) +
+    coord_tern() + 
+    geom_point() +
+    theme_minimal() ,
+  ncol = 2
+)
+
 
