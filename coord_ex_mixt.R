@@ -182,17 +182,19 @@ get_scheffe = function(X, order = 1){
 }
 
 
-get_scheffe_D_efficiency = function(X, order = 1){
+get_scheffe_log_D_efficiency = function(X, order = 1){
   X_m = get_scheffe(X, order = order)
-  det_X_m = det(t(X_m) %*% X_m)
-  D_eff = det_X_m^(1/ncol(X_m))/nrow(X_m)
-  return(D_eff)
+  # det_X_m = det(t(X_m) %*% X_m)
+  log_det_X_m = determinant(t(X_m) %*% X_m)$modulus
+  log_D_eff = log_det_X_m/ncol(X_m) - log(nrow(X_m))
+  # log_D_eff = det_X_m^(1/ncol(X_m))/nrow(X_m)
+  return(log_D_eff)
 }
 
 
 
 
-coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 100, seed = NULL, X = NULL){
+coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 100, seed = NULL, X = NULL, plot_designs = F, verbose = 1){
   
   if(is.null(X)){
     # If no initial design is provided, create a random starting design
@@ -224,25 +226,25 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
   
   X_orig = X
   
-  # D-efficiency of current design
-  d_eff_0 = get_scheffe_D_efficiency(X, order = order)
-  d_eff_best = d_eff_0
-  d_eff_aux = Inf
+  # log D-efficiency of current design
+  log_d_eff_orig = get_scheffe_log_D_efficiency(X, order = order)
+  log_d_eff_best = log_d_eff_orig
+  log_d_eff_aux = Inf
   
   # Coordinate exchanges:
   it = 0
   while(it < max_it){
     it = it + 1
-    cat("Iter: ", it, ", D-efficiency: ", d_eff_best, "\n")
+    if(verbose >= 1) cat("Iter: ", it, ", log D-efficiency: ", log_d_eff_best, "\n")
     # If there was no improvement in this iteration
-    if(abs(d_eff_aux - d_eff_best) < 1e-16) break
+    if(abs(log_d_eff_aux - log_d_eff_best) < 1e-16) break
     
-    d_eff_aux = d_eff_best
+    log_d_eff_aux = log_d_eff_best
     
     for(k in 1:nrow(X)){
-      # cat("k = ", k, "\n")
+      if(verbose >= 2) cat("k = ", k, "\n")
       for(i in 1:q){
-        # cat("i = ", i, "\n")
+        if(verbose >= 2) cat("i = ", i, "\n")
         
         # The algorithm then evaluates the optimality criterion for a certain number of different designs, say k, obtained by replacing the original coordinate with k equidistant points on the Cox-effect direction line between the lower and upper limit.
         
@@ -251,18 +253,19 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
         
         # compute optimality criterion for points in Cox's direction
         for(j in 1:nrow(cox_direction)){
-          # cat("j = ", j, "\n")
+          if(verbose >= 2) cat("j = ", j, "\n")
           
           X_new = X
           # replace point of Cox direction in original matrix
           X_new[k,] = cox_direction[j,]
           
           # Get D-efficiency of new design
-          d_eff_j = get_scheffe_D_efficiency(X_new, order = order)
+          log_d_eff_j = get_scheffe_log_D_efficiency(X_new, order = order)
+          if(verbose >= 2) cat("\t", log_d_eff_j, "\n")
           
           # If new D-efficiency is better, then keep the new one
-          if(d_eff_j > d_eff_best) {
-            d_eff_best = d_eff_j
+          if(log_d_eff_j > log_d_eff_best) {
+            log_d_eff_best = log_d_eff_j
             X = X_new
           }
         } # end for Cox
@@ -271,24 +274,57 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
       
     } # end for nrow
     
+    if(verbose >= 3) print(X)
     
   } # end while
   
-  cat("\n")
-  cat("Original D-efficiency: ", d_eff_0)
-  cat("\n")
-  cat("Final D-efficiency: ", d_eff_best)
-  cat("\n")
-  cat("Number of iterations: ", it)
-  cat("\n")
+  if(verbose >= 1){
+    cat("\n")
+    cat("Original log D-efficiency: ", log_d_eff_orig)
+    cat("\n")
+    cat("Final log D-efficiency: ", log_d_eff_best)
+    cat("\n")
+    cat("Number of iterations: ", it)
+    cat("\n")
+  } 
   
-  return(list(
+  
+  out_list = list(
     X_orig = X_orig,
     X = X,
-    d_eff_orig = d_eff_0,
-    d_eff = d_eff_best,
+    d_eff_orig = log_d_eff_orig,
+    d_eff = log_d_eff_best,
     n_iter = it
-  ))
+  )
+    
+  if(plot_designs) {
+    
+    ggtern::grid.arrange(
+      out_list$X_orig %>% 
+        as_tibble() %>% 
+        set_names(c("x", "y", "z")) %>% 
+        ggplot(aes(x, y, z)) +
+        geom_point() +
+        coord_tern() + 
+        theme_minimal() +
+        ggtitle(label = "",
+                subtitle = paste0("log D-efficiency = ", round(out_list$d_eff_orig, 3)))
+      ,
+      out_list$X %>% 
+        as_tibble() %>% 
+        set_names(c("x", "y", "z")) %>% 
+        ggplot(aes(x, y, z)) +
+        coord_tern() + 
+        geom_point() +
+        theme_minimal() +
+        ggtitle(label = "",
+                subtitle = paste0("log D-efficiency = ", round(out_list$d_eff, 3)))
+      ,
+      ncol = 2
+    )
+  }
+  
+  return(out_list)
   
 }
 
@@ -306,7 +342,7 @@ plot_result = function(res_alg){
       coord_tern() + 
       theme_minimal() +
       ggtitle(label = "",
-              subtitle = paste0("D-efficiency = ", round(res_alg$d_eff_orig, 3)))
+              subtitle = paste0("log D-efficiency = ", round(res_alg$d_eff_orig, 3)))
     ,
     res_alg$X %>% 
       as_tibble() %>% 
@@ -316,7 +352,7 @@ plot_result = function(res_alg){
       geom_point() +
       theme_minimal() +
       ggtitle(label = "",
-              subtitle = paste0("D-efficiency = ", round(res_alg$d_eff, 3)))
+              subtitle = paste0("log D-efficiency = ", round(res_alg$d_eff, 3)))
     ,
     ncol = 2
   )
@@ -350,11 +386,24 @@ ggtern::grid.arrange(grobs = cox_direction_plots, ncol = 4)
 
 
 # First degree
-res_alg = coord_ex_mixt(9, q = 3, n_cox_points = 100)
-plot_result(res_alg)
+res_alg = coord_ex_mixt(9, q = 3, n_cox_points = 100, plot_designs = T)
 
 
 # Second degree
-res_alg_order_2 = coord_ex_mixt(9, q = 3, 100, order = 2)
-plot_result(res_alg_order_2)
+res_alg_order_2 = coord_ex_mixt(9, q = 3, 100, order = 2, plot_designs = T)
+
+
+# Third degree
+res_alg_order_3 = coord_ex_mixt(9, q = 3, 100, order = 3, max_it = 2, plot_designs = T)
+
+
+
+
+
+
+
+
+
+
+
 
