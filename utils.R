@@ -80,35 +80,35 @@ plot_cox_direction = function(x_in, comp = NULL, n_points = 3){
   if(!is.null(comp) & length(comp) == 1){
     out = compute_cox_direction(x_in, comp, n_points) %>% 
       as_tibble() %>% 
-      set_names(c("x", "y", "z")) %>% 
-      ggplot(aes(x, y, z)) +
+      set_names(c("c1", "c2", "c3")) %>% 
+      ggplot(aes(c1, c2, c3)) +
       coord_tern() + 
       geom_path(linetype = "dashed") + 
       theme_minimal() +
-      geom_point(data = tibble(x = x_in[1], y = x_in[2], z = x_in[3]))
+      geom_point(data = tibble(c1 = x_in[1], c2 = x_in[2], c3 = x_in[3]))
   } else{
     if(is.null(comp)) comp = 1:length(x_in)
     
     cox_dirs = lapply(1:length(comp), function(i){
       compute_cox_direction(x_in, i, 3) %>% 
         as_tibble() %>% 
-        set_names(c("x", "y", "z")) %>% 
+        set_names(c("c1", "c2", "c3")) %>% 
         mutate(comp = i)
     }) %>% 
       bind_rows()
     
     # out = cox_dirs %>% 
-    #   ggtern(aes(x, y, z)) + 
+    #   ggtern(aes(c1, c2, c3)) + 
     #   geom_path(linetype = "dashed", aes(group = comp)) + 
     #   theme_minimal() +
     #   geom_point(data = tibble(x = x_in[1], y = x_in[2], z = x_in[3]))
     
     out = cox_dirs %>% 
-      ggplot(aes(x, y, z)) +
+      ggplot(aes(c1, c2, c3)) +
       coord_tern() + 
       geom_path(linetype = "dashed", aes(group = comp)) + 
       theme_minimal() +
-      geom_point(data = tibble(x = x_in[1], y = x_in[2], z = x_in[3]))
+      geom_point(data = tibble(c1 = x_in[1], c2 = x_in[2], c3 = x_in[3]))
   }
   
   return(out)
@@ -302,8 +302,8 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
     # ggtern::grid.arrange(
     #   out_list$X_orig %>% 
     #     as_tibble() %>% 
-    #     set_names(c("x", "y", "z")) %>% 
-    #     ggplot(aes(x, y, z)) +
+    #     set_names(c("c1", "c2", "c3")) %>% 
+    #     ggplot(aes(c1, c2, c3)) +
     #     geom_point(shape = "x", size = 2) +
     #     coord_tern() + 
     #     theme_minimal() +
@@ -312,8 +312,8 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
     #   ,
     #   out_list$X %>% 
     #     as_tibble() %>% 
-    #     set_names(c("x", "y", "z")) %>% 
-    #     ggplot(aes(x, y, z)) +
+    #     set_names(c("c1", "c2", "c3")) %>% 
+    #     ggplot(aes(c1, c2, c3)) +
     #     coord_tern() + 
     #     geom_point(shape = "x", size = 2) +
     #     theme_minimal() +
@@ -337,8 +337,8 @@ plot_result = function(res_alg){
   ggtern::grid.arrange(
     res_alg$X_orig %>% 
       as_tibble() %>% 
-      set_names(c("x", "y", "z")) %>% 
-      ggplot(aes(x, y, z)) +
+      set_names(c("c1", "c2", "c3")) %>% 
+      ggplot(aes(c1, c2, c3)) +
       geom_point(shape = "x", size = 4) +
       coord_tern() + 
       theme_minimal() +
@@ -347,8 +347,8 @@ plot_result = function(res_alg){
     ,
     res_alg$X %>% 
       as_tibble() %>% 
-      set_names(c("x", "y", "z")) %>% 
-      ggplot(aes(x, y, z)) +
+      set_names(c("c1", "c2", "c3")) %>% 
+      ggplot(aes(c1, c2, c3)) +
       coord_tern() + 
       geom_point(shape = "x", size = 4) +
       theme_minimal() +
