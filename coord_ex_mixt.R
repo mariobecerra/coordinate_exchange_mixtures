@@ -28,17 +28,56 @@ ggtern::grid.arrange(grobs = cox_direction_plots, ncol = 4)
 
 
 # First degree
-res_alg_order_1 = coord_ex_mixt(9, q = 3, n_cox_points = 1000, order = 1, plot_designs = T)
+res_alg_order_1_1 = coord_ex_mixt(
+  9, q = 3, order = 1, 
+  plot_designs = T,
+  method = "finite", n_cox_points = 200)
+
+res_alg_order_1_2 = coord_ex_mixt(
+  9, q = 3, order = 1, 
+  plot_designs = T,
+  method = "L-BFGS-B")
+
+res_alg_order_1_3 = coord_ex_mixt(
+  9, q = 3, order = 1, 
+  plot_designs = T,
+  method = "Brent")
 
 
 # Second degree
-res_alg_order_2 = coord_ex_mixt(9, q = 3, n_cox_points = 1000, order = 2, plot_designs = T)
+res_alg_order_2_1 = coord_ex_mixt(
+  9, q = 3, order = 2, 
+  plot_designs = T,
+  method = "finite", n_cox_points = 1000)
+
+res_alg_order_2_2 = coord_ex_mixt(
+  9, q = 3, order = 2, 
+  plot_designs = T,
+  method = "L-BFGS-B")
+
+res_alg_order_2_3 = coord_ex_mixt(
+  9, q = 3, order = 2, 
+  plot_designs = T,
+  method = "Brent")
+
+
 
 
 # Third degree
-res_alg_order_3_1 = coord_ex_mixt(12, q = 3, n_cox_points = 100, order = 3, plot_designs = T)
-res_alg_order_3_2 = coord_ex_mixt(12, q = 3, n_cox_points = 1000, order = 3, plot_designs = T)
+res_alg_order_3_1 = coord_ex_mixt(
+  9, q = 3, order = 3, 
+  plot_designs = T,
+  method = "finite", n_cox_points = 1000)
 
+res_alg_order_3_2 = coord_ex_mixt(
+  9, q = 3, order = 3, 
+  plot_designs = T,
+  method = "L-BFGS-B")
+
+res_alg_order_3_3 = coord_ex_mixt(
+  9, q = 3, order = 3, 
+  plot_designs = T,
+  method = "Brent")
 
 
 
