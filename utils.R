@@ -248,27 +248,18 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
         
         # The algorithm then evaluates the optimality criterion for a certain number of different designs, say k, obtained by replacing the original coordinate with k equidistant points on the Cox-effect direction line between the lower and upper limit.
         
-        # get points from Cox's direction
-        cox_direction = compute_cox_direction(X[k,], i, n_cox_points)
+        optim_list = optimize_cox_direction(
+          X_in = X, 
+          k = k, 
+          i = i, 
+          order = order,
+          log_d_eff_best = log_d_eff_best,
+          fn = NULL, gr = NULL,
+          n_cox_points = n_cox_points,
+          verbose = verbose)
         
-        # compute optimality criterion for points in Cox's direction
-        for(j in 1:nrow(cox_direction)){
-          if(verbose >= 2) cat("j = ", j, "\n")
-          
-          X_new = X
-          # replace point of Cox direction in original matrix
-          X_new[k,] = cox_direction[j,]
-          
-          # Get D-efficiency of new design
-          log_d_eff_j = get_scheffe_log_D_efficiency(X_new, order = order)
-          if(verbose >= 2) cat("\t", log_d_eff_j, "\n")
-          
-          # If new D-efficiency is better, then keep the new one
-          if(log_d_eff_j > log_d_eff_best) {
-            log_d_eff_best = log_d_eff_j
-            X = X_new
-          }
-        } # end for Cox
+        X = optim_list$X
+        log_d_eff_best = optim_list$log_d_eff_best
         
       } # end for q
       
@@ -360,5 +351,73 @@ plot_result = function(res_alg){
   
   
 }
+
+
+
+
+
+optimize_cox_direction = function(
+  X_in, k, i, log_d_eff_best,
+  n_cox_points = 100,
+  order = 1,
+  fn = NULL, gr = NULL, 
+  verbose = 0){
+  
+  X = X_in
+  
+  if(is.null(fn)){
+    
+    # If fn is not given, then use a discrete approximation to Cox's direction and find optimal values
+    
+    # get points from Cox's direction
+    cox_direction = compute_cox_direction(X[k,], i, n_cox_points)
+    
+    # compute optimality criterion for points in Cox's direction
+    for(j in 1:nrow(cox_direction)){
+      if(verbose >= 2) cat("j = ", j, "\n")
+      
+      X_new = X
+      # replace point of Cox direction in original matrix
+      X_new[k,] = cox_direction[j,]
+      
+      # Get D-efficiency of new design
+      log_d_eff_j = get_scheffe_log_D_efficiency(X_new, order = order)
+      if(verbose >= 2) cat("\t", log_d_eff_j, "\n")
+      
+      # If new D-efficiency is better, then keep the new one
+      if(log_d_eff_j > log_d_eff_best) {
+        log_d_eff_best = log_d_eff_j
+        X = X_new
+      }
+    } # end for Cox
+    
+  } # end if
+  else{
+    
+    # optim(X[k,i], 
+    #       fn_cox_scheffe, 
+    #       X = X, k = k, i = i,
+    #       method = "Brent",
+    #       lower = 0.0,
+    #       upper = 1.0)
+    
+    # To complete
+    brent_res = optim(X[k,i], 
+          fn = fn_cox_scheffe, 
+          gr = gr_cox_scheffe,
+          X = X, k = k, i = i,
+          method = "Brent",
+          lower = 0.0,
+          upper = 1.0)
+  }
+  
+  return(list(X = X, log_d_eff_best = log_d_eff_best))
+  
+  
+}
+
+
+
+
 
 
