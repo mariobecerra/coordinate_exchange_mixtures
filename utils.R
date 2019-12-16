@@ -188,13 +188,13 @@ get_scheffe_log_D_efficiency = function(X, order = 1){
   log_det_X_m = determinant(t(X_m) %*% X_m)$modulus
   log_D_eff = log_det_X_m/ncol(X_m) - log(nrow(X_m))
   # log_D_eff = det_X_m^(1/ncol(X_m))/nrow(X_m)
-  return(log_D_eff)
+  return(as.numeric(log_D_eff))
 }
 
 
 
 
-coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 100, seed = NULL, X = NULL, plot_designs = F, verbose = 1){
+coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 10, seed = NULL, X = NULL, plot_designs = F, verbose = 1, method = "Brent"){
   
   if(is.null(X)){
     # If no initial design is provided, create a random starting design
@@ -212,6 +212,31 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
     stop("Rows in X must sum 1")
   }
   
+  available_methods = c("finite_approximation", "Brent", "L-BFGS-B")
+  
+  pmatch_vec = sapply(available_methods, 
+         function(x) pmatch(method, x))
+  
+  method = names(which(!is.na(pmatch_vec)))
+  
+  if(all(is.null(pmatch_vec))){
+    # if no method is recognized
+    stop('Optimization method unknown. Must be one of the following:\n\t',
+         paste(available_methods, collapse = ", "))
+  } else{
+    if(method == "finite_approximation"){
+      fn_optim = NULL
+      gr_optim = NULL
+      method_optim = NULL
+    } else{
+      fn_optim = fn_cox_scheffe
+      # gr_optim = gr_cox_scheffe
+      gr_optim = NULL
+      method_optim = method
+    }
+  }
+  
+  cat('Optimizing using "', method, '".\n', sep = "")
   
   
   if(!is.null(seed)) set.seed(seed)
@@ -254,7 +279,7 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
           i = i, 
           order = order,
           log_d_eff_best = log_d_eff_best,
-          fn = NULL, gr = NULL,
+          fn = fn_optim, gr = gr_optim, method = method,
           n_cox_points = n_cox_points,
           verbose = verbose)
         
@@ -360,6 +385,7 @@ optimize_cox_direction = function(
   X_in, k, i, log_d_eff_best,
   n_cox_points = 100,
   order = 1,
+  method = NULL,
   fn = NULL, gr = NULL, 
   verbose = 0){
   
@@ -393,22 +419,59 @@ optimize_cox_direction = function(
     
   } # end if
   else{
+    if(is.null(method)){
+      warning("Optimizing method missing. L-BFGS-B will be used.")
+      method = "L-BFGS-B"
+    } 
     
-    # optim(X[k,i], 
-    #       fn_cox_scheffe, 
-    #       X = X, k = k, i = i,
-    #       method = "Brent",
-    #       lower = 0.0,
-    #       upper = 1.0)
+    optim_res = optim(
+      X[k,i],
+      fn = fn_cox_scheffe,
+      # gr = gr_cox_scheffe,
+      X = X, k = k, i = i, order = order,
+      method = method,
+      lower = 0.0,
+      upper = 1.0)
     
-    # To complete
-    brent_res = optim(X[k,i], 
-          fn = fn_cox_scheffe, 
-          gr = gr_cox_scheffe,
-          X = X, k = k, i = i,
-          method = "Brent",
-          lower = 0.0,
-          upper = 1.0)
+    # optim_res = optim(
+    #   0.5,
+    #   fn = fn_cox_scheffe,
+    #   gr = gr_cox_scheffe,
+    #   X = X, k = k, i = i, order = order,
+    #   method = "L-BFGS")
+    # 
+    # optim_res = optim(
+    #   0.5, 
+    #   fn = fn_cox_scheffe, 
+    #   # gr = gr_cox_scheffe,
+    #   gr = NULL,
+    #   X = X, k = k, i = i, order = order,
+    #   method = "Brent", 
+    #   lower = 0.0,
+    #   upper = 1.0)
+    
+    
+    if(optim_res$convergence != 0) {
+      stop('Function "optim" failed. Message:\n\t', optim_res$message)
+    }
+    x = optim_res$par
+    x_row = X[k,]
+    
+    delta = x - x_row[i]
+    # recompute proportions in cox dir
+    for(j in setdiff(1:q, i)){
+      # In case it's a corner case, i.e., x[i] = 1
+      # The corner case might be wrong. Check later.
+      if(abs(1 - x_row[i]) < 1e-16) res = 0
+      else{
+        res = x_row[j] - delta*x_row[j]/(1 - x_row[i])
+      }
+      x_row[j] = res
+    } # end j
+    x_row[i] = x
+    
+    X[k,] = x_row
+    log_d_eff_best = -optim_res$value
   }
   
   return(list(X = X, log_d_eff_best = log_d_eff_best))
@@ -417,6 +480,82 @@ optimize_cox_direction = function(
 }
 
 
+
+
+
+
+
+fn_cox_scheffe = function(x, X, k, i, order){
+  
+  x_row = X[k,]
+  
+  delta = x - x_row[i]
+  # recompute proportions in cox dir
+  for(j in setdiff(1:q, i)){
+    # In case it's a corner case, i.e., x[i] = 1
+    # This may be wrong. Check later.
+    if(abs(1 - x_row[i]) < 1e-16) res = 0
+    else{
+      res = x_row[j] - delta*x_row[j]/(1 - x_row[i])
+    }
+    x_row[j] = res
+  } # end j
+  x_row[i] = x
+  
+  Y = X
+  Y[k,] = x_row
+  
+  utility_funct = get_scheffe_log_D_efficiency(Y, order = order)
+  return(-as.numeric(utility_funct))
+}
+
+
+
+
+
+
+
+
+find_ith_row_inv_A = function(A, i, tol = 1e-32){
+  n = nrow(A)
+  eye = diag(n)[,i]
+  a_i = solve(A, eye, tol = tol)
+  return(a_i)
+}
+
+find_inv_A_ij = function(A, i, j, tol = 1e-32){
+  ith_row = find_ith_row_inv_A(A, 1)
+  return(ith_row[j])
+}
+
+
+
+gr_cox_scheffe = function(x, X, k, i, order){
+  x_row = X[k,]
+  
+  delta = x - x_row[i]
+  # recompute proportions in cox dir
+  for(j in setdiff(1:q, i)){
+    # In case it's a corner case, i.e., x[i] = 1
+    # This may be wrong. Check later.
+    if(abs(1 - x_row[i]) < 1e-16) res = 0
+    else{
+      res = x_row[j] - delta*x_row[j]/(1 - x_row[i])
+    }
+    x_row[j] = res
+  } # end j
+  x_row[i] = x
+  
+  Y = X
+  Y[k,] = x_row
+  
+  Y = get_scheffe(Y, order = order)
+  
+  YtY = t(Y) %*% Y
+  
+  ji_element = find_inv_A_ij(YtY, i, k, tol = 1e-32)
+  return(ji_element/q)
+}
 
 
 
