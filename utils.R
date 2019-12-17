@@ -194,7 +194,7 @@ get_scheffe_log_D_efficiency = function(X, order = 1){
 
 
 
-coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 10, seed = NULL, X = NULL, plot_designs = F, verbose = 1, method = "Brent"){
+coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 50, seed = NULL, X = NULL, plot_designs = F, verbose = 1, method = "Brent"){
   
   if(is.null(X)){
     # If no initial design is provided, create a random starting design
@@ -283,8 +283,32 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
           n_cox_points = n_cox_points,
           verbose = verbose)
         
+        if(optim_list$optim_conv != 0){
+          
+          cat('Using finite approximation with 1000 points for iteration',
+              'k =', k,
+              ', i =', i,
+              '.\n')
+          
+          optim_list = optimize_cox_direction(
+            X_in = X, 
+            k = k, 
+            i = i, 
+            order = order,
+            log_d_eff_best = log_d_eff_best,
+            fn = NULL, gr = NULL, method = NULL,
+            n_cox_points = 1000,
+            verbose = verbose)
+        }
+        
+        
         X = optim_list$X
         log_d_eff_best = optim_list$log_d_eff_best
+        
+        if(verbose >= 5) {
+          print(X)
+          cat("Log D-eff:", log_d_eff_best, "\n")
+        }
         
       } # end for q
       
@@ -391,6 +415,9 @@ optimize_cox_direction = function(
   
   X = X_in
   
+  # Convergence parameter flag
+  optim_conv = NULL
+  
   if(is.null(fn)){
     
     # If fn is not given, then use a discrete approximation to Cox's direction and find optimal values
@@ -417,12 +444,15 @@ optimize_cox_direction = function(
       }
     } # end for Cox
     
+    
   } # end if
   else{
     if(is.null(method)){
       warning("Optimizing method missing. L-BFGS-B will be used.")
       method = "L-BFGS-B"
     } 
+    
+    trace = verbose > 1
     
     optim_res = optim(
       X[k,i],
@@ -431,7 +461,8 @@ optimize_cox_direction = function(
       X = X, k = k, i = i, order = order,
       method = method,
       lower = 0.0,
-      upper = 1.0)
+      upper = 1.0,
+      control = list(maxit = 10000, trace = trace))
     
     # optim_res = optim(
     #   0.5,
@@ -450,9 +481,14 @@ optimize_cox_direction = function(
     #   lower = 0.0,
     #   upper = 1.0)
     
+    optim_conv = optim_res$convergence
     
-    if(optim_res$convergence != 0) {
-      stop('Function "optim" failed. Message:\n\t', optim_res$message)
+    if(optim_conv != 0) {
+      warning('Function "optim" failed in iteration: ',
+              'k = ', k,
+              ', i = ', i,
+              '.\nMessage: "', optim_res$message,
+              '"\nUsing finite approximation for this iteration instead.')
     }
     x = optim_res$par
     x_row = X[k,]
@@ -462,7 +498,7 @@ optimize_cox_direction = function(
     for(j in setdiff(1:q, i)){
       # In case it's a corner case, i.e., x[i] = 1
       # The corner case might be wrong. Check later.
-      if(abs(1 - x_row[i]) < 1e-16) res = 0
+      if(abs(1 - x_row[i]) < 1e-16) res = (1 - x_row[i])/(q-1)
       else{
         res = x_row[j] - delta*x_row[j]/(1 - x_row[i])
       }
@@ -474,7 +510,10 @@ optimize_cox_direction = function(
     log_d_eff_best = -optim_res$value
   }
   
-  return(list(X = X, log_d_eff_best = log_d_eff_best))
+  return(list(
+    X = X, 
+    log_d_eff_best = log_d_eff_best,
+    optim_conv = optim_conv))
   
   
 }
@@ -494,7 +533,7 @@ fn_cox_scheffe = function(x, X, k, i, order){
   for(j in setdiff(1:q, i)){
     # In case it's a corner case, i.e., x[i] = 1
     # This may be wrong. Check later.
-    if(abs(1 - x_row[i]) < 1e-16) res = 0
+    if(abs(1 - x_row[i]) < 1e-16) res = (1 - x_row[i])/(q-1)
     else{
       res = x_row[j] - delta*x_row[j]/(1 - x_row[i])
     }
@@ -538,7 +577,7 @@ gr_cox_scheffe = function(x, X, k, i, order){
   for(j in setdiff(1:q, i)){
     # In case it's a corner case, i.e., x[i] = 1
     # This may be wrong. Check later.
-    if(abs(1 - x_row[i]) < 1e-16) res = 0
+    if(abs(1 - x_row[i]) < 1e-16) res = (1 - x_row[i])/(q-1)
     else{
       res = x_row[j] - delta*x_row[j]/(1 - x_row[i])
     }
