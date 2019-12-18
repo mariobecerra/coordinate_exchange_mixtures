@@ -2,6 +2,8 @@
 # Based on section 6.3.5 of Goos and Jones
 # and Piepel, Cooley and Jones (2005)
 
+library(Rcpp)
+sourceCpp("utils.cpp")
 
 create_random_initial_design = function(n_runs, q, seed = NULL){
   X = matrix(rep(NA_real_, n_runs*q), nrow = n_runs)
@@ -151,33 +153,25 @@ get_scheffe_order_3 = function(X){
 }
 
 
+# get_scheffe = function(X, order = 1){
+#   stopifnot(order %in% 1:3)
+#   if(order == 1)  X_m = X
+#   else{
+#     if(order == 2){
+#       
+#       X_m = get_scheffe_order_2(X)
+#       
+#     } else {
+#       # order = 3
+#       X_m = get_scheffe_order_3(X)
+#     }
+#   }
+#   return(X_m)
+# }
+
+
 get_scheffe = function(X, order = 1){
-  stopifnot(order %in% 1:3)
-  if(order == 1)  X_m = X
-  else{
-    if(order == 2){
-      # q = ncol(X)
-      # n = nrow(X)
-      # n_col_X_m = q + (q-1)*q/2
-      # X_m = matrix(rep(NA_real_, n_col_X_m*n), nrow = n)
-      # X_m[,1:q] = X
-      # 
-      # k = q
-      # for(i in 1:(q-1)){
-      #   for(j in (i+1):q){
-      #     # cat("i = ", i, ", j = ", j, "\n")
-      #     k = k+1
-      #     X_m[,k] = X[,i]*X[,j]
-      #   }  
-      # }
-      
-      X_m = get_scheffe_order_2(X)
-      
-    } else {
-      # order = 3
-      X_m = get_scheffe_order_3(X)
-    }
-  }
+  X_m = getScheffe(X, order)
   return(X_m)
 }
 
