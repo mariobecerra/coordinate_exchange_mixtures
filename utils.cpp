@@ -1,6 +1,10 @@
-#include <Rcpp.h>
+// #include <Rcpp.h>
+#include <RcppArmadillo.h>
+
+// [[Rcpp::depends(RcppArmadillo)]]
 
 using namespace Rcpp;
+using namespace arma;
 
 // This is a simple example of exporting a C++ function to R. You can
 // source this function into an R session using the Rcpp::sourceCpp 
@@ -10,14 +14,6 @@ using namespace Rcpp;
 //   http://www.rcpp.org/
 //   http://adv-r.had.co.nz/Rcpp.html
 //   http://gallery.rcpp.org/
-//
-
-
-
-
-
-
-
 
 
 
@@ -120,7 +116,7 @@ NumericMatrix getScheffeOrder3(NumericMatrix X){
 
 
 // [[Rcpp::export]]
-NumericMatrix getScheffe(NumericMatrix X, int order){
+arma::mat getScheffe(NumericMatrix X, int order){
   
   // not the most elegant, but works
   bool flag = (order != 1 & order != 2 & order != 3);
@@ -139,9 +135,30 @@ NumericMatrix getScheffe(NumericMatrix X, int order){
       X_m = getScheffeOrder3(X);
     }
   }
-  return X_m;
+  // arma::mat_out = as<mat>(X_m);
+  return as<mat>(X_m);
 }
 
+
+
+
+// [[Rcpp::export]]
+NumericMatrix transposeNumeric(const NumericMatrix & x) {
+  return transpose(x);
+}
+
+
+// [[Rcpp::export]]
+cx_double getScheffeLogDEfficiency(NumericMatrix X, int order){
+  arma::mat X_m = getScheffe(X, order);
+  arma::mat X_mT = trans(X_m);
+  arma::mat XtX = X_mT * X_m;
+  cx_double log_det_X_m = arma::log_det(XtX);
+  cx_double denom = cx_double(X_m.n_cols);
+  cx_double rhs = cx_double(log(X_m.n_rows));
+  cx_double log_D_eff = log_det_X_m/denom - rhs;
+  return log_D_eff;
+}
 
 
 
@@ -155,15 +172,16 @@ NumericMatrix getScheffe(NumericMatrix X, int order){
 //     X_new = clone(X);
 //     cox_dir_j = cox_dir(j, _);
 //     X_new(k,_) = cox_dir_j;
-//     
+// 
 //     log_d_eff_j = get_scheffe_log_D_efficiency(X_new, order = order);
 //   }
-//   
-//   
-//   
-//   
+// 
+// 
+// 
+// 
 //   return X;
 // }
+
 
 
 // You can include R code blocks in C++ files processed with sourceCpp

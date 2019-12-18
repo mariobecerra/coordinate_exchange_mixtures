@@ -176,16 +176,18 @@ get_scheffe = function(X, order = 1){
 }
 
 
+# get_scheffe_log_D_efficiency = function(X, order = 1){
+#   X_m = get_scheffe(X, order = order)
+#   # det_X_m = det(t(X_m) %*% X_m)
+#   log_det_X_m = determinant(t(X_m) %*% X_m)$modulus
+#   log_D_eff = log_det_X_m/ncol(X_m) - log(nrow(X_m))
+#   # log_D_eff = det_X_m^(1/ncol(X_m))/nrow(X_m)
+#   return(as.numeric(log_D_eff))
+# }
+
 get_scheffe_log_D_efficiency = function(X, order = 1){
-  X_m = get_scheffe(X, order = order)
-  # det_X_m = det(t(X_m) %*% X_m)
-  log_det_X_m = determinant(t(X_m) %*% X_m)$modulus
-  log_D_eff = log_det_X_m/ncol(X_m) - log(nrow(X_m))
-  # log_D_eff = det_X_m^(1/ncol(X_m))/nrow(X_m)
-  return(as.numeric(log_D_eff))
+  return(as.numeric(getScheffeLogDEfficiency(X, order)))
 }
-
-
 
 
 coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 50, seed = NULL, X = NULL, plot_designs = F, verbose = 1, method = "Brent"){
@@ -430,6 +432,13 @@ optimize_cox_direction = function(
       # Get D-efficiency of new design
       log_d_eff_j = get_scheffe_log_D_efficiency(X_new, order = order)
       if(verbose >= 2) cat("\t", log_d_eff_j, "\n")
+      
+      if(is.na(log_d_eff_j)){
+        warning("NA detected in log_d_eff_j for iteration k = ", k, 
+                ", i = ", i,
+                ", j = ", j)
+        log_d_eff_j = -Inf
+      }
       
       # If new D-efficiency is better, then keep the new one
       if(log_d_eff_j > log_d_eff_best) {
