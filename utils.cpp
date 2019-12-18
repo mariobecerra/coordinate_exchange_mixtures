@@ -149,38 +149,48 @@ NumericMatrix transposeNumeric(const NumericMatrix & x) {
 
 
 // [[Rcpp::export]]
-cx_double getScheffeLogDEfficiency(NumericMatrix X, int order){
+double getScheffeLogDEfficiency(NumericMatrix X, int order){
   arma::mat X_m = getScheffe(X, order);
   arma::mat X_mT = trans(X_m);
   arma::mat XtX = X_mT * X_m;
   cx_double log_det_X_m = arma::log_det(XtX);
-  cx_double denom = cx_double(X_m.n_cols);
-  cx_double rhs = cx_double(log(X_m.n_rows));
-  cx_double log_D_eff = log_det_X_m/denom - rhs;
+  double log_D_eff;
+  
+  // If there is an imaginary part, then the output is -Inf
+  if(log_det_X_m.imag() != 0){
+    log_D_eff = -10000000.0;
+  } else{
+    log_D_eff = log_det_X_m.real()/X_m.n_cols - log(X_m.n_rows);
+  }
+  
   return log_D_eff;
 }
 
 
 
-// // [[Rcpp::export]]
-// NumericMatrix findBestCoxDir(NumericMatrix cox_dir, NumericMatrix X, int i, int k, int j, int order) {
-//   NumericMatrix X_new;
-//   NumericVector cox_dir_j;
-//   double log_d_eff_j;
-//   int n_cox_points = cox_dir.nrow();
-//   for(int j = 0; j < n_cox_points; j++){
-//     X_new = clone(X);
-//     cox_dir_j = cox_dir(j, _);
-//     X_new(k,_) = cox_dir_j;
-// 
-//     log_d_eff_j = get_scheffe_log_D_efficiency(X_new, order = order);
-//   }
-// 
-// 
-// 
-// 
-//   return X;
-// }
+// [[Rcpp::export]]
+NumericMatrix findBestCoxDir(NumericMatrix cox_dir, NumericMatrix X_in, int k, int order, double log_d_eff_best) {
+  NumericMatrix X = clone(X_in);
+  NumericMatrix X_new = clone(X);
+  NumericVector cox_dir_j;
+  double log_d_eff_j;
+  int n_cox_points = cox_dir.nrow();
+  for(int j = 0; j < n_cox_points; j++){
+    X_new = clone(X);
+    cox_dir_j = cox_dir(j, _);
+    X_new(k-1,_) = cox_dir_j;
+
+    log_d_eff_j = getScheffeLogDEfficiency(X_new, order);
+
+    // If new D-efficiency is better, then keep the new one
+    if(log_d_eff_j > log_d_eff_best) {
+      log_d_eff_best = log_d_eff_j;
+      X = clone(X_new);
+    }
+  }
+
+  return X;
+}
 
 
 
