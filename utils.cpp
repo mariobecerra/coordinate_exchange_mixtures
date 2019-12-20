@@ -169,7 +169,7 @@ double getScheffeLogDEfficiency(NumericMatrix X, int order){
 
 
 // [[Rcpp::export]]
-NumericMatrix findBestCoxDir(NumericMatrix cox_dir, NumericMatrix X_in, int k, int order, double log_d_eff_best) {
+NumericMatrix findBestCoxDirOld(NumericMatrix cox_dir, NumericMatrix X_in, int k, int order, double log_d_eff_best) {
   NumericMatrix X = clone(X_in);
   NumericMatrix X_new = clone(X);
   NumericVector cox_dir_j;
@@ -189,6 +189,35 @@ NumericMatrix findBestCoxDir(NumericMatrix cox_dir, NumericMatrix X_in, int k, i
     }
   }
 
+  return X;
+}
+
+
+
+// [[Rcpp::export]]
+NumericMatrix findBestCoxDir(NumericMatrix cox_dir, NumericMatrix X_in, int k, int order, double log_d_eff_best) {
+  NumericMatrix X = clone(X_in);
+  NumericVector x_k(X.ncol());
+  
+  // numeric vector for Cox direction in j-th row
+  NumericVector cox_dir_j(cox_dir.ncol());
+  double log_d_eff_j;
+  int n_cox_points = cox_dir.nrow();
+  for(int j = 0; j < n_cox_points; j++){
+    x_k = X(k-1,_);
+    X(k-1,_) = cox_dir(j, _);
+    
+    log_d_eff_j = getScheffeLogDEfficiency(X, order);
+    
+    // If new D-efficiency is better, then keep the new one.
+    // If it's not, keep the old one.
+    if(log_d_eff_j > log_d_eff_best) {
+      log_d_eff_best = log_d_eff_j;
+    } else{
+      X(k-1,_) = x_k;
+    }
+  }
+  
   return X;
 }
 
