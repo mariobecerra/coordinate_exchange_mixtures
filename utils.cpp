@@ -223,6 +223,230 @@ NumericMatrix findBestCoxDir(NumericMatrix cox_dir, NumericMatrix X_in, int k, i
 
 
 
+// [[Rcpp::export]]
+arma::vec prueba_vec(int n){
+  vec out(n);
+  for(int i = 0; i < n; i++){
+    out[i] = 4;
+  }
+  return(out);
+}
+
+
+// [[Rcpp::export]]
+NumericVector prueba_vec2(int n){
+  vec out = prueba_vec(n);
+  
+  return(NumericVector(out.begin(), out.end()));
+}
+
+
+// [[Rcpp::export]]
+arma::vec seq0(int init, int end, int n_points){
+  vec seq_points = linspace<vec>(init, end, n_points);
+  return(seq_points);
+}
+
+
+
+// [[Rcpp::export]]
+arma::vec zerosCpp(int n){
+  vec out = zeros(n);
+  return(out);
+}
+
+
+
+// [[Rcpp::export]]
+arma::vec removeElement(vec x, int ix){
+  int n = x.n_elem;
+  vec out;
+  if(ix != 0 & ix != n-1){
+    out = join_vert(x.subvec(0, ix-1), x.subvec(ix + 1, n-1)); 
+  } else{
+    if(ix == 0){
+      out = x.subvec(1, n-1); 
+    } else{
+      out = x.subvec(0, n-2); 
+    }
+  }
+  
+  return(out);
+}
+
+
+
+// // [[Rcpp::export]]
+// Rcpp::NumericVector armaSetDiff(arma::uvec& x, arma::uvec& y){
+//   // https://stackoverflow.com/questions/29724083
+//   x = arma::unique(x);
+//   y = arma::unique(y);
+//   
+//   for (size_t j = 0; j < y.n_elem; j++) {
+//     arma::uvec q1 = arma::find(x == y[j]);
+//     if (!q1.empty()) {
+//       x.shed_row(q1(0));
+//     }
+//   }
+//   
+//   Rcpp::NumericVector x2 = Rcpp::wrap(x);
+//   x2.attr("dim") = R_NilValue;
+//   return x2;
+// }
+
+
+
+// [[Rcpp::export]]
+arma::mat computeCoxDirection(NumericVector x, int comp, int n_points){
+   
+  int i = comp - 1;
+  int q = x.length();
+   
+  //   # points in Cox's direction
+  //   seq_points = seq(from = 0, to = 1, length.out = n_points)
+  vec seq_points = linspace<vec>(0, 1, n_points);
+  
+  //   diffs = seq_points - x[i]
+  vec diffs = seq_points - x(i);
+  
+  // ix1 = which.min(abs(diffs))
+  int ix1 = index_min(abs(diffs));
+  
+  //   cox_direction_aux = seq_points - diffs[ix1]
+  //   cox_direction_aux2 = cox_direction_aux[-ix1]
+  //   betw_0_1 = cox_direction_aux2 >= 0 & cox_direction_aux2 <= 1
+  //   cox_direction_aux3 = c(0, cox_direction_aux2[betw_0_1], 1)
+  vec cox_direction_aux = seq_points - diffs(ix1);
+
+  // vec cox_direction_aux2(cox_direction_aux.n_elem - 1);
+  // // copy all elements of cox_direction_aux except the one with index ix1
+  // // the equivalent in R: cox_direction_aux2 = cox_direction_aux[-ix1]
+  // // could not find a simpler way to do it with Armadillo
+  // int aux_int = 0;
+  // for(int j = 0; j < cox_direction_aux.n_elem - 1; j++){
+  //   if(j != ix1) cox_direction_aux2(j) = cox_direction_aux(aux_int);
+  //   aux_int++;
+  // }
+  vec cox_direction_aux2 = removeElement(cox_direction_aux, ix1);
+  
+  uvec bigger_zero = find(cox_direction_aux2 >= 0);
+  uvec less_one = find(cox_direction_aux2 <= 1);
+  uvec betw_0_1 = intersect(bigger_zero, less_one);
+  vec cox_direction_aux3 = join_vert(zeros(1), cox_direction_aux2.elem(betw_0_1), ones(1));
+  
+  // cox_direction = matrix(rep(NA_real_, q*length(cox_direction_aux3)), ncol = q)
+  arma::mat cox_direction = arma::mat(cox_direction_aux3.n_elem, q, fill::randu);
+  
+
+
+  // cox_direction[,i] = cox_direction_aux3
+  cox_direction.col(i) = cox_direction_aux3;
+  
+  
+  // deltas = cox_direction_aux3 - x[i]
+  vec deltas = cox_direction_aux3 - x(i);
+
+    for(int n = 0; n < cox_direction_aux3.n_elem; n++){
+      // recompute proportions:
+      vec setDiff_aux = linspace<vec>(0, q-1, q);
+      vec setDiff = removeElement(setDiff_aux, i);
+      int j;
+      double res;
+      for(int j_aux = 0; j_aux < setDiff.n_elem; j_aux++){
+        j = setDiff(j_aux);
+        // In case it's a corner case, i.e., x[i] = 1
+        if(abs(1 - x(i)) < 1e-16) res = (1 - cox_direction(n, i))/(q-1);
+        else{
+          res = x(j) - deltas(n)*x(j)/(1 - x(i));
+        }
+        cox_direction(n, j) = res;
+        j++;
+      } // end j
+
+      // if(any(cox_direction[n, ] < -1e-10 | cox_direction[n, ] > 1 + 1e10)) {
+      //   stop("Error while computing Cox direction. ",
+      //        "Value out of bounds.\n",
+      //        "Cox direction computed:\n\tc(",
+      //        paste(cox_direction[n, ], collapse = ", "), ")")
+      // }
+    }
+    // cox_direction = unique(cox_direction)
+
+
+//   for(n in seq_along(cox_direction_aux3)){
+//     # recompute proportions:
+//     for(j in setdiff(1:q, i)){
+//       # In case it's a corner case, i.e., x[i] = 1
+//       if(abs(1 - x[i]) < 1e-16) res = (1 - cox_direction[n, i])/(q-1)
+//       else{
+//         res = x[j] - deltas[n]*x[j]/(1 - x[i])
+//       }
+//       cox_direction[n, j] = res
+//     } # end j
+//     
+//     if(any(cox_direction[n, ] < -1e-10 | cox_direction[n, ] > 1 + 1e10)) {
+//       stop("Error while computing Cox direction. ",
+//            "Value out of bounds.\n", 
+//            "Cox direction computed:\n\tc(", 
+//            paste(cox_direction[n, ], collapse = ", "), ")")
+//     }
+//   }
+//   cox_direction = unique(cox_direction)
+//   
+  return(cox_direction);
+}
+
+
+
+
+// compute_cox_direction = function(x, comp, n_points = 11){
+//   
+//   i = comp
+//   q = length(x)
+//   
+//   
+//   # points in Cox's direction
+//   seq_points = seq(from = 0, to = 1, length.out = n_points)
+//   
+//   diffs = seq_points - x[i]
+//   ix1 = which.min(abs(diffs))
+//   
+//   cox_direction_aux = seq_points - diffs[ix1]
+//   cox_direction_aux2 = cox_direction_aux[-ix1]
+//   betw_0_1 = cox_direction_aux2 >= 0 & cox_direction_aux2 <= 1
+//   cox_direction_aux3 = c(0, cox_direction_aux2[betw_0_1], 1)
+//   
+//   cox_direction = matrix(rep(NA_real_, q*length(cox_direction_aux3)), ncol = q)
+//   cox_direction[,i] = cox_direction_aux3
+//   deltas = cox_direction_aux3 - x[i]
+//   
+//   for(n in seq_along(cox_direction_aux3)){
+//     # recompute proportions:
+//     for(j in setdiff(1:q, i)){
+//       # In case it's a corner case, i.e., x[i] = 1
+//       if(abs(1 - x[i]) < 1e-16) res = (1 - cox_direction[n, i])/(q-1)
+//       else{
+//         res = x[j] - deltas[n]*x[j]/(1 - x[i])
+//       }
+//       cox_direction[n, j] = res
+//     } # end j
+//     
+//     if(any(cox_direction[n, ] < -1e-10 | cox_direction[n, ] > 1 + 1e10)) {
+//       stop("Error while computing Cox direction. ",
+//            "Value out of bounds.\n", 
+//            "Cox direction computed:\n\tc(", 
+//            paste(cox_direction[n, ], collapse = ", "), ")")
+//     }
+//   }
+//   cox_direction = unique(cox_direction)
+//   
+//   return(cox_direction)
+// }
+
+
+
+
+
 // You can include R code blocks in C++ files processed with sourceCpp
 // (useful for testing and development). The R code will be automatically 
 // run after the compilation.
