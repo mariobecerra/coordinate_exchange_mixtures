@@ -334,8 +334,13 @@ arma::mat computeCoxDirection(NumericVector x, int comp, int n_points){
   uvec betw_0_1 = intersect(bigger_zero, less_one);
   vec cox_direction_aux3 = join_vert(zeros(1), cox_direction_aux2.elem(betw_0_1), ones(1));
   
+  int cox_dir_n_elems = cox_direction_aux3.n_elem;
+  // if repeated elements
+  // if(cox_direction_aux3(1) == 0) cox_direction_aux3 = removeElement(cox_direction_aux3, 1);
+  // if(cox_direction_aux3(cox_dir_n_elems-2) == 1) cox_direction_aux3 = removeElement(cox_direction_aux3, cox_dir_n_elems-2);
+  
   // cox_direction = matrix(rep(NA_real_, q*length(cox_direction_aux3)), ncol = q)
-  arma::mat cox_direction = arma::mat(cox_direction_aux3.n_elem, q, fill::randu);
+  arma::mat cox_direction = arma::mat(cox_dir_n_elems, q, fill::randu);
   
 
 
@@ -346,7 +351,7 @@ arma::mat computeCoxDirection(NumericVector x, int comp, int n_points){
   // deltas = cox_direction_aux3 - x[i]
   vec deltas = cox_direction_aux3 - x(i);
 
-    for(int n = 0; n < cox_direction_aux3.n_elem; n++){
+    for(int n = 0; n < cox_dir_n_elems; n++){
       // recompute proportions:
       vec setDiff_aux = linspace<vec>(0, q-1, q);
       vec setDiff = removeElement(setDiff_aux, i);
@@ -359,40 +364,18 @@ arma::mat computeCoxDirection(NumericVector x, int comp, int n_points){
         else{
           res = x(j) - deltas(n)*x(j)/(1 - x(i));
         }
+        // if(res < -1e-10 | )
         cox_direction(n, j) = res;
         j++;
       } // end j
 
-      // if(any(cox_direction[n, ] < -1e-10 | cox_direction[n, ] > 1 + 1e10)) {
-      //   stop("Error while computing Cox direction. ",
-      //        "Value out of bounds.\n",
-      //        "Cox direction computed:\n\tc(",
-      //        paste(cox_direction[n, ], collapse = ", "), ")")
-      // }
+      if(any(cox_direction.row(n) < -1e-10 || cox_direction.row(n) > 1 + 1e10)) {
+        cox_direction.print();
+        stop("Error while computing Cox direction. Value out of bounds.\n");
+        
+      }
     }
     // cox_direction = unique(cox_direction)
-
-
-//   for(n in seq_along(cox_direction_aux3)){
-//     # recompute proportions:
-//     for(j in setdiff(1:q, i)){
-//       # In case it's a corner case, i.e., x[i] = 1
-//       if(abs(1 - x[i]) < 1e-16) res = (1 - cox_direction[n, i])/(q-1)
-//       else{
-//         res = x[j] - deltas[n]*x[j]/(1 - x[i])
-//       }
-//       cox_direction[n, j] = res
-//     } # end j
-//     
-//     if(any(cox_direction[n, ] < -1e-10 | cox_direction[n, ] > 1 + 1e10)) {
-//       stop("Error while computing Cox direction. ",
-//            "Value out of bounds.\n", 
-//            "Cox direction computed:\n\tc(", 
-//            paste(cox_direction[n, ], collapse = ", "), ")")
-//     }
-//   }
-//   cox_direction = unique(cox_direction)
-//   
   return(cox_direction);
 }
 

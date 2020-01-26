@@ -21,50 +21,18 @@ create_random_initial_design = function(n_runs, q, seed = NULL){
 }
 
 
+
+
+
 compute_cox_direction = function(x, comp, n_points = 11){
+  # Call C++ function and get unique rows
+  # cox_direction = unique(computeCoxDirection(x, comp, n_points))
   
-  i = comp
-  q = length(x)
-  
-  
-  # points in Cox's direction
-  seq_points = seq(from = 0, to = 1, length.out = n_points)
-  
-  diffs = seq_points - x[i]
-  ix1 = which.min(abs(diffs))
-  
-  cox_direction_aux = seq_points - diffs[ix1]
-  cox_direction_aux2 = cox_direction_aux[-ix1]
-  betw_0_1 = cox_direction_aux2 >= 0 & cox_direction_aux2 <= 1
-  cox_direction_aux3 = c(0, cox_direction_aux2[betw_0_1], 1)
-  
-  cox_direction = matrix(rep(NA_real_, q*length(cox_direction_aux3)), ncol = q)
-  cox_direction[,i] = cox_direction_aux3
-  deltas = cox_direction_aux3 - x[i]
-  
-  for(n in seq_along(cox_direction_aux3)){
-    # recompute proportions:
-    for(j in setdiff(1:q, i)){
-      # In case it's a corner case, i.e., x[i] = 1
-      if(abs(1 - x[i]) < 1e-16) res = (1 - cox_direction[n, i])/(q-1)
-      else{
-        res = x[j] - deltas[n]*x[j]/(1 - x[i])
-      }
-      cox_direction[n, j] = res
-    } # end j
-    
-    if(any(cox_direction[n, ] < -1e-10 | cox_direction[n, ] > 1 + 1e10)) {
-      stop("Error while computing Cox direction. ",
-           "Value out of bounds.\n", 
-           "Cox direction computed:\n\tc(", 
-           paste(cox_direction[n, ], collapse = ", "), ")")
-    }
-  }
-  cox_direction = unique(cox_direction)
+  # Call C++ function
+  cox_direction = computeCoxDirection(x, comp, n_points)
   
   return(cox_direction)
 }
-
 
 
 plot_cox_direction = function(x_in, comp = NULL, n_points = 3){
