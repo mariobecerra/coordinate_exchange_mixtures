@@ -39,7 +39,7 @@ compute_cox_direction_old = function(x, comp, n_points = 11){
            paste(cox_direction[n, ], collapse = ", "), ")")
     }
   }
-  # cox_direction = unique(cox_direction)
+  cox_direction = unique(cox_direction)
   
   return(cox_direction)
 }
@@ -315,7 +315,7 @@ optimize_cox_direction_R = function(
     # If fn is not given, then use a discrete approximation to Cox's direction and find optimal values
     
     # get points from Cox's direction
-    cox_direction = compute_cox_direction(X[k,], i, n_cox_points)
+    cox_direction = compute_cox_direction_old(X[k,], i, n_cox_points)
     
     # compute optimality criterion for points in Cox's direction
     for(j in 1:nrow(cox_direction)){
