@@ -217,10 +217,29 @@ arma::mat getInformationMatrix(arma::cube X, arma::vec beta){
 
 
 // [[Rcpp::export]]
-arma::mat prueba(arma::mat X){
-  X.print();
-  return X;
+double getLogDEfficiency(arma::cube X, arma::vec beta){
+  
+  int m = beta.n_elem;
+  arma::mat I(m-1, m-1, fill::zeros);
+  
+  I = getInformationMatrix(X, beta);
+  
+  cx_double log_det_I = arma::log_det(I);
+  double log_D_eff;
+  
+  // If there is an imaginary part, then the output is -Inf
+  if(log_det_I.imag() != 0){
+    log_D_eff = -10000000.0;
+  } else{
+    // Don't know if I should scale or just return log determinant
+    log_D_eff = -log_det_I.real()/I.n_cols - log(I.n_rows);
+  }
+  
+  return log_D_eff;
 }
+
+
+
 
 
 
