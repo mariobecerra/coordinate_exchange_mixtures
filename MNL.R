@@ -81,6 +81,7 @@ sapply(1:4, function(i) getUjs(X, beta$beta, beta$beta_ix, i, 1))
 getUs(X, beta$beta, 1) %>% as.numeric()
 
 getInformationMatrix(X, beta$beta)
+getLogDEfficiency(X, beta$beta)
 
 
 
