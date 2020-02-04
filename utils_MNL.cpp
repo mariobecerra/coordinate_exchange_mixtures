@@ -241,5 +241,177 @@ double getLogDEfficiency(arma::cube X, arma::vec beta){
 
 
 
+arma::vec removeElement(vec x, int ix){
+  int n = x.n_elem;
+  vec out;
+  if(ix != 0 & ix != n-1){
+    out = join_vert(x.subvec(0, ix-1), x.subvec(ix + 1, n-1)); 
+  } else{
+    if(ix == 0){
+      out = x.subvec(1, n-1); 
+    } else{
+      out = x.subvec(0, n-2); 
+    }
+  }
+  
+  return(out);
+}
+
+
+
+
+
+// [[Rcpp::export]]
+arma::mat computeCoxDirection(NumericVector x, int comp, int n_points){
+  
+  int i = comp - 1;
+  int q = x.length();
+  
+  //   # points in Cox's direction
+  //   seq_points = seq(from = 0, to = 1, length.out = n_points)
+  vec seq_points = linspace<vec>(0, 1, n_points);
+  
+  //   diffs = seq_points - x[i]
+  vec diffs = seq_points - x(i);
+  
+  // ix1 = which.min(abs(diffs))
+  int ix1 = index_min(abs(diffs));
+  
+  //   cox_direction_aux = seq_points - diffs[ix1]
+  //   cox_direction_aux2 = cox_direction_aux[-ix1]
+  //   betw_0_1 = cox_direction_aux2 >= 0 & cox_direction_aux2 <= 1
+  //   cox_direction_aux3 = c(0, cox_direction_aux2[betw_0_1], 1)
+  vec cox_direction_aux = seq_points - diffs(ix1);
+  
+  // vec cox_direction_aux2(cox_direction_aux.n_elem - 1);
+  // // copy all elements of cox_direction_aux except the one with index ix1
+  // // the equivalent in R: cox_direction_aux2 = cox_direction_aux[-ix1]
+  // // could not find a simpler way to do it with Armadillo
+  // int aux_int = 0;
+  // for(int j = 0; j < cox_direction_aux.n_elem - 1; j++){
+  //   if(j != ix1) cox_direction_aux2(j) = cox_direction_aux(aux_int);
+  //   aux_int++;
+  // }
+  vec cox_direction_aux2 = removeElement(cox_direction_aux, ix1);
+  
+  uvec bigger_zero = find(cox_direction_aux2 >= 0);
+  uvec less_one = find(cox_direction_aux2 <= 1);
+  uvec betw_0_1 = intersect(bigger_zero, less_one);
+  vec cox_direction_aux3 = join_vert(zeros(1), cox_direction_aux2.elem(betw_0_1), ones(1));
+  
+  int cox_dir_n_elems = cox_direction_aux3.n_elem;
+  // if repeated elements
+  // if(cox_direction_aux3(1) == 0) cox_direction_aux3 = removeElement(cox_direction_aux3, 1);
+  // if(cox_direction_aux3(cox_dir_n_elems-2) == 1) cox_direction_aux3 = removeElement(cox_direction_aux3, cox_dir_n_elems-2);
+  
+  // cox_direction = matrix(rep(NA_real_, q*length(cox_direction_aux3)), ncol = q)
+  arma::mat cox_direction = arma::mat(cox_dir_n_elems, q, fill::randu);
+  
+  
+  
+  // cox_direction[,i] = cox_direction_aux3
+  cox_direction.col(i) = cox_direction_aux3;
+  
+  
+  // deltas = cox_direction_aux3 - x[i]
+  vec deltas = cox_direction_aux3 - x(i);
+  
+  for(int n = 0; n < cox_dir_n_elems; n++){
+    // recompute proportions:
+    vec setDiff_aux = linspace<vec>(0, q-1, q);
+    vec setDiff = removeElement(setDiff_aux, i);
+    int j;
+    double res;
+    for(int j_aux = 0; j_aux < setDiff.n_elem; j_aux++){
+      j = setDiff(j_aux);
+      // In case it's a corner case, i.e., x[i] = 1
+      if(abs(1 - x(i)) < 1e-16) res = (1 - cox_direction(n, i))/(q-1);
+      else{
+        res = x(j) - deltas(n)*x(j)/(1 - x(i));
+      }
+      // if(res < -1e-10 | )
+      cox_direction(n, j) = res;
+      j++;
+    } // end j
+    
+    if(any(cox_direction.row(n) < -1e-10 || cox_direction.row(n) > 1 + 1e10)) {
+      cox_direction.print();
+      stop("Error while computing Cox direction. Value out of bounds.\n");
+      
+    }
+  }
+  // cox_direction = unique(cox_direction)
+  return(cox_direction);
+}
+
+
+
+
+
+
+
+// [[Rcpp::export]]
+arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, int k, int i, double log_d_eff_best) {
+
+  // Create new cube
+  arma::cube X = X_in;
+  
+  // // Create new cube
+  // arma::cube X(size(X_in));
+  // 
+  // // copy elements of cube
+  // X = X_in;
+  
+  
+  // int J = X.n_cols;
+  int q = X.n_rows;
+  // int S = X.n_elem/(X.n_cols*X.n_rows);
+
+  // NumericVector x_k(X.ncol());
+  arma::vec x_k(q);
+
+
+
+  
+  double log_d_eff_j;
+  int n_cox_points = cox_dir.n_rows;
+  
+  for(int j = 0; j < n_cox_points; j++){
+  
+    // same as:
+    // X(arma::span::all, arma::span(k-1), arma::span(i-1)) = cox_dir.row(j);
+    // if the previous worked
+    // Basically, here we replace the j-th row of the Cox direction matrix
+    // in the corresponding slice and row of X
+    for(int l = 0; l < q; l++){
+      X(l, k-1, i-1) = cox_dir(j, l);
+    }
+    
+    log_d_eff_j = getLogDEfficiency(X, beta);
+    
+    x_k = X(arma::span::all, arma::span(k-1), arma::span(i-1));
+    // x_k.print();
+    cout << "j = " << j << "\n";
+    cout << "d ef = "  << log_d_eff_j << "\n\n";
+
+    // If new D-efficiency is better, then keep the new one.
+    // If it's not, keep the old one.
+    if(log_d_eff_j > log_d_eff_best) {
+      log_d_eff_best = log_d_eff_j;
+    } else{
+      
+      // return to old state
+      for(int l = 0; l < q; l++){
+        X(l, k-1, i-1) = x_k(l);
+      }
+      
+    }
+  }
+
+  return X;
+}
+
+
+
 
 

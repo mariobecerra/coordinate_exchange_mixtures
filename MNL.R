@@ -83,6 +83,7 @@ getUs(X, beta$beta, 1) %>% as.numeric()
 getInformationMatrix(X, beta$beta)
 getLogDEfficiency(X, beta$beta)
 
+aaa = findBestCoxDir(computeCoxDirection(X[, 1,1], 1, 10), X, beta$beta, 1, 1, -100)
 
 
 
