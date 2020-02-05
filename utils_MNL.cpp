@@ -262,10 +262,10 @@ arma::vec removeElement(vec x, int ix){
 
 
 // [[Rcpp::export]]
-arma::mat computeCoxDirection(NumericVector x, int comp, int n_points){
+arma::mat computeCoxDirection(arma::vec x, int comp, int n_points){
   
   int i = comp - 1;
-  int q = x.length();
+  int q = x.n_elem;
   
   //   # points in Cox's direction
   //   seq_points = seq(from = 0, to = 1, length.out = n_points)
@@ -348,12 +348,13 @@ arma::mat computeCoxDirection(NumericVector x, int comp, int n_points){
 
 
 
-
-
 // [[Rcpp::export]]
-arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, int k, int i, double log_d_eff_best) {
+arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, int k, int s, double log_d_eff_best) {
 
-  // Create new cube
+  // k: Cox direction index (1 to q)
+  // s: choice set (1 to S)
+  
+  // Create new cube, otherwise it is modified in R too
   arma::cube X = X_in;
   
   // // Create new cube
@@ -379,17 +380,17 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
   for(int j = 0; j < n_cox_points; j++){
   
     // same as:
-    // X(arma::span::all, arma::span(k-1), arma::span(i-1)) = cox_dir.row(j);
+    // X(arma::span::all, arma::span(k-1), arma::span(s-1)) = cox_dir.row(j);
     // if the previous worked
     // Basically, here we replace the j-th row of the Cox direction matrix
     // in the corresponding slice and row of X
     for(int l = 0; l < q; l++){
-      X(l, k-1, i-1) = cox_dir(j, l);
+      X(l, k-1, s-1) = cox_dir(j, l);
     }
     
     log_d_eff_j = getLogDEfficiency(X, beta);
     
-    x_k = X(arma::span::all, arma::span(k-1), arma::span(i-1));
+    x_k = X(arma::span::all, arma::span(k-1), arma::span(s-1));
     // x_k.print();
     cout << "j = " << j << "\n";
     cout << "d ef = "  << log_d_eff_j << "\n\n";
@@ -402,7 +403,7 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
       
       // return to old state
       for(int l = 0; l < q; l++){
-        X(l, k-1, i-1) = x_k(l);
+        X(l, k-1, s-1) = x_k(l);
       }
       
     }
@@ -410,6 +411,103 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
 
   return X;
 }
+
+
+
+
+
+
+// [[Rcpp::export]]
+Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta, int n_cox_points, int max_it, int verbose = 1){
+
+  // Should add some code to check the input dimensions
+
+  // Create new cube, otherwise it is modified in R too
+  arma::cube X = X_orig;
+  
+  int J = X.n_cols;
+  int q = X.n_rows;
+  int S = X.n_elem/(X.n_cols*X.n_rows);
+  
+  // Create matrix with appropriate dimensions for Cox direction in each iteration
+  arma::mat cox_dir(n_cox_points, q);
+  
+  // Vector of ingredient proportions
+  arma::vec x(q);
+
+
+  double log_d_eff_orig = getLogDEfficiency(X, beta);
+  double log_d_eff_best = log_d_eff_orig;
+  double log_d_eff_aux = 1e308; // Max double
+
+  // Coordinate exchanges
+  int it = 0;
+  while(it < max_it){
+    it = it + 1;
+    if(verbose >= 1) cout << "Iter: " << it << ", log D-efficiency: " << log_d_eff_best, "\n";
+
+    // If there was no improvement in this iteration
+    if(abs(log_d_eff_aux - log_d_eff_best) < 1e-16) break;
+
+    log_d_eff_aux = log_d_eff_best;
+
+    for(int k = 1; k <= J; k++){
+      if(verbose >= 2) cout << "k = " << k << "\n";
+
+      for(int s = 1; s <= S; s++){
+        if(verbose >= 2) cout << "\ts = " << s << "\n";
+
+        for(int i = 0; i < q; i++){
+          if(verbose >= 2) cout << "\t\ti = " << i << "\n";
+          
+          // populate x vector with corresponding ingredient proportions
+          for(int l = 0; l < q; l++){
+            x(l) = X(l, k-1, s-1);
+          }
+          
+          cox_dir = computeCoxDirection(x, i+1, n_cox_points);
+          X = findBestCoxDir(cox_dir, X, beta, k, s, log_d_eff_best);
+          log_d_eff_best = getLogDEfficiency(X, beta);
+
+          if(verbose >= 5) {
+            // X.print(); // check later because output may not be coordinated
+            cout << "\t\t\tLog D-eff:" << log_d_eff_best << "\n";
+          }
+
+        } // end for i
+
+      } // end for s
+
+    } // end for k
+
+    // if(verbose >= 3) X.print();
+
+  } // end while
+
+  if(verbose >= 1){
+    cout << "\n";
+    cout << "Original log D-efficiency: " << log_d_eff_orig;
+    cout << "\n";
+    cout << "Final log D-efficiency: " << log_d_eff_best;
+    cout << "\n";
+    cout << "Number of iterations: " << it;
+    cout << "\n";
+  }
+
+  // return object
+  return Rcpp::List::create(
+    _["X_orig"] = X_orig,
+    _["X"] = X,
+    _["d_eff_orig"] = log_d_eff_orig,
+    _["d_eff"] = log_d_eff_best,
+    _["n_iter"] = it
+  );
+
+} // end function
+
+
+
+
 
 
 
