@@ -77,8 +77,10 @@ S = 2
 X = create_random_initial_MNL_design(q, J, S, seed = 4)
 beta = create_random_beta(q)
 
-sapply(1:4, function(i) getUjs(X, beta$beta, beta$beta_ix, i, 1))
-getUs(X, beta$beta, 1) %>% as.numeric()
+# sapply(1:4, function(i) getUjs(X, beta$beta, beta$beta_ix, i, 1))
+(Xs = getXs(X, 1))
+getUs(X, beta$beta, 1, Xs) %>% as.numeric()
+getPs(X, beta$beta, 1, Xs)
 
 getInformationMatrix(X, beta$beta)
 getLogDEfficiency(X, beta$beta)
