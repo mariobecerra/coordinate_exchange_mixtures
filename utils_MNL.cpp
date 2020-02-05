@@ -7,80 +7,6 @@ using namespace Rcpp;
 using namespace arma;
 
 
-// [[Rcpp::export]]
-double getUjs(arma::cube X, arma::vec beta, arma::mat beta_ix, int j, int s){
-  // j and s are 1-indexed
-  
-  int q = X.n_rows;
-  if((q*q*q+5*q)/6 != beta.n_elem) stop("Incompatible q in beta and X");
-  
-  // int J = X.n_cols;
-  // int S = X.n_elem_slice;
-  double Ujs;
-  
-  double first_term = 0;
-  double second_term = 0;
-  double third_term = 0;
-  
-  
-  arma::uvec ids_na;
-  arma::uvec ids_i;
-  arma::uvec ids_k;
-  arma::uvec ids_l;
-  arma::uvec ids_iter;
-  int id;
-  
-  
-  // the first q items in vector correspond to beta_i
-  for(int i = 0; i < q-1; i++){
-    // subtract 1 from j and s because it is 1-indexed
-    first_term = first_term + (beta(i) - beta(q-1))*X(i, j-1, s-1);
-  }
-  
-  // second part
-  double beta_ik;
-  for(int i = 0; i < q-1; i++){
-    for(int k = i+1; k < q; k++){
-      ids_na = intersect(find_finite(beta_ix.col(1)), find_nonfinite(beta_ix.col(2)));
-      ids_i = find(beta_ix.col(0) == i+1);
-      ids_k = find(beta_ix.col(1) == k+1);
-      // Gives the correct index in the beta vector
-      ids_iter = intersect(ids_na, intersect(ids_i, ids_k));
-      // extract first (and only element) of this vector
-      // this is a trick so that I don't have to cast a vector to integer
-      id = ids_iter(0);
-      beta_ik = beta(id);
-      // subtract 1 from j and s because it is 1-indexed
-      second_term = second_term + beta_ik*X(i, j-1, s-1)*X(k, j-1, s-1); 
-    }
-  }
-  
-  
-  // third part
-  double beta_ikl;
-  for(int i = 0; i < q-2; i++){
-    for(int k = i+1; k < q-1; k++){
-      for(int l = k+1; l < q; l++){
-        ids_na = intersect(find_finite(beta_ix.col(1)), find_finite(beta_ix.col(2)));
-        ids_i = find(beta_ix.col(0) == i+1);
-        ids_k = find(beta_ix.col(1) == k+1);
-        ids_l = find(beta_ix.col(2) == l+1);
-        // Gives the correct index in the beta vector
-        ids_iter = intersect(ids_na, intersect(ids_i, intersect(ids_k, ids_l)));
-        // extract first (and only element) of this vector
-        // this is a trick so that I don't have to cast a vector to integer
-        id = ids_iter(0);
-        beta_ikl = beta(id);
-        // subtract 1 from j and s because it is 1-indexed
-        third_term = third_term + beta_ikl*X(i, j-1, s-1)*X(k, j-1, s-1)*X(l, j-1, s-1);
-      }
-    }
-  }
-  
-  Ujs = first_term + second_term + third_term;
-  return Ujs;
-}
-
 
 // [[Rcpp::export]]
 arma::mat getXs(arma::cube X, int s){
@@ -147,12 +73,12 @@ arma::vec getUs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
   // compute beta_i_star = beta_i - beta_q
   for(int i = 0; i < q-1; i++){
     beta2(i) = beta(i) - beta(q-1);
-    // cout << "beta_star_" << i << ": " << beta2(i) << "\n";
+    // Rcout << "beta_star_" << i << ": " << beta2(i) << std::endl;
   }
   
   for(int i = q-1; i < m-1; i++){
     beta2(i) = beta(i+1);
-    // cout << "beta2_" << i << ": " << beta2(i) << "\n";
+    // Rcout << "beta2_" << i << ": " << beta2(i) << std::endl;
   }
   
   
@@ -173,7 +99,9 @@ arma::vec getPs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
   arma::vec exp_Ujs(J);
   arma::vec P(J);
   
-  exp_Ujs = exp(Us);
+  // exp_Ujs = exp(Us);
+  // subtracting the maximum value to avoid numerical overflow
+  exp_Ujs = exp(Us - max(Us));
   
   double sum_exp_Ujs = sum(exp_Ujs);
   
@@ -227,9 +155,10 @@ double getLogDEfficiency(arma::cube X, arma::vec beta){
   cx_double log_det_I = arma::log_det(I);
   double log_D_eff;
   
-  // If there is an imaginary part, then the output is -Inf
+  // If there is an imaginary part, then the output is -100000
   if(log_det_I.imag() != 0){
-    log_D_eff = -10000000.0;
+    warning("Imaginary log-det computed");
+    log_D_eff = -100000;
   } else{
     // Don't know if I should scale or just return log determinant
     log_D_eff = -log_det_I.real()/I.n_cols - log(I.n_rows);
@@ -349,7 +278,7 @@ arma::mat computeCoxDirection(arma::vec x, int comp, int n_points){
 
 
 // [[Rcpp::export]]
-arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, int k, int s, double log_d_eff_best) {
+arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, int k, int s, double log_d_eff_best, int verbose) {
 
   // k: Cox direction index (1 to q)
   // s: choice set (1 to S)
@@ -388,19 +317,28 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
       X(l, k-1, s-1) = cox_dir(j, l);
     }
     
+    if(verbose > 4){
+      Rcout << "j = " << j << "(of " << n_cox_points << ")\n"; 
+    }
+    
     log_d_eff_j = getLogDEfficiency(X, beta);
+    if(log_d_eff_j == -100000){
+      Rcout << "Imaginary part in log-det in j = " << j << ", k = " << k << ", s = " << s << std::endl;
+    }
     
     x_k = X(arma::span::all, arma::span(k-1), arma::span(s-1));
     // x_k.print();
-    cout << "j = " << j << "\n";
-    cout << "d ef = "  << log_d_eff_j << "\n\n";
+    
+    if(verbose > 4){
+      Rcout << "d ef = "  << log_d_eff_j << "\n\n";
+    }
 
     // If new D-efficiency is better, then keep the new one.
     // If it's not, keep the old one.
     if(log_d_eff_j > log_d_eff_best) {
+      // This design has a better D-efficiency, so we update the best value
       log_d_eff_best = log_d_eff_j;
     } else{
-      
       // return to old state
       for(int l = 0; l < q; l++){
         X(l, k-1, s-1) = x_k(l);
@@ -418,7 +356,7 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
 
 
 // [[Rcpp::export]]
-Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta, int n_cox_points, int max_it, int verbose = 1){
+Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta, int n_cox_points, int max_it, int verbose){
 
   // Should add some code to check the input dimensions
 
@@ -438,13 +376,13 @@ Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta
 
   double log_d_eff_orig = getLogDEfficiency(X, beta);
   double log_d_eff_best = log_d_eff_orig;
-  double log_d_eff_aux = 1e308; // Max double
+  double log_d_eff_aux = -1e308; // -Inf
 
   // Coordinate exchanges
   int it = 0;
   while(it < max_it){
     it = it + 1;
-    if(verbose >= 1) cout << "Iter: " << it << ", log D-efficiency: " << log_d_eff_best, "\n";
+    if(verbose >= 1) Rcout << "Iter: " << it << ", log D-efficiency: " << log_d_eff_best << std::endl;
 
     // If there was no improvement in this iteration
     if(abs(log_d_eff_aux - log_d_eff_best) < 1e-16) break;
@@ -452,13 +390,13 @@ Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta
     log_d_eff_aux = log_d_eff_best;
 
     for(int k = 1; k <= J; k++){
-      if(verbose >= 2) cout << "k = " << k << "\n";
+      if(verbose >= 2) Rcout << "k = " << k << std::endl;
 
       for(int s = 1; s <= S; s++){
-        if(verbose >= 2) cout << "\ts = " << s << "\n";
+        if(verbose >= 2) Rcout << "\ts = " << s << std::endl;
 
         for(int i = 0; i < q; i++){
-          if(verbose >= 2) cout << "\t\ti = " << i << "\n";
+          if(verbose >= 2) Rcout << "\t\ti = " << i << std::endl;
           
           // populate x vector with corresponding ingredient proportions
           for(int l = 0; l < q; l++){
@@ -466,12 +404,12 @@ Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta
           }
           
           cox_dir = computeCoxDirection(x, i+1, n_cox_points);
-          X = findBestCoxDir(cox_dir, X, beta, k, s, log_d_eff_best);
+          X = findBestCoxDir(cox_dir, X, beta, k, s, log_d_eff_best, verbose);
           log_d_eff_best = getLogDEfficiency(X, beta);
 
           if(verbose >= 5) {
             // X.print(); // check later because output may not be coordinated
-            cout << "\t\t\tLog D-eff:" << log_d_eff_best << "\n";
+            Rcout << "\t\t\tLog D-eff:" << log_d_eff_best << std::endl;
           }
 
         } // end for i
@@ -485,13 +423,13 @@ Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta
   } // end while
 
   if(verbose >= 1){
-    cout << "\n";
-    cout << "Original log D-efficiency: " << log_d_eff_orig;
-    cout << "\n";
-    cout << "Final log D-efficiency: " << log_d_eff_best;
-    cout << "\n";
-    cout << "Number of iterations: " << it;
-    cout << "\n";
+    Rcout << std::endl;
+    Rcout << "Original log D-efficiency: " << log_d_eff_orig;
+    Rcout << std::endl;
+    Rcout << "Final log D-efficiency: " << log_d_eff_best;
+    Rcout << std::endl;
+    Rcout << "Number of iterations: " << it;
+    Rcout << std::endl;
   }
 
   // return object
@@ -513,3 +451,77 @@ Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta
 
 
 
+// // [[Rcpp::export]]
+// double getUjs(arma::cube X, arma::vec beta, arma::mat beta_ix, int j, int s){
+//   // This is an old version that is not used anywhere in the rest of the code
+//   // j and s are 1-indexed
+//   
+//   int q = X.n_rows;
+//   if((q*q*q+5*q)/6 != beta.n_elem) stop("Incompatible q in beta and X");
+//   
+//   // int J = X.n_cols;
+//   // int S = X.n_elem_slice;
+//   double Ujs;
+//   
+//   double first_term = 0;
+//   double second_term = 0;
+//   double third_term = 0;
+//   
+//   
+//   arma::uvec ids_na;
+//   arma::uvec ids_i;
+//   arma::uvec ids_k;
+//   arma::uvec ids_l;
+//   arma::uvec ids_iter;
+//   int id;
+//   
+//   
+//   // the first q items in vector correspond to beta_i
+//   for(int i = 0; i < q-1; i++){
+//     // subtract 1 from j and s because it is 1-indexed
+//     first_term = first_term + (beta(i) - beta(q-1))*X(i, j-1, s-1);
+//   }
+//   
+//   // second part
+//   double beta_ik;
+//   for(int i = 0; i < q-1; i++){
+//     for(int k = i+1; k < q; k++){
+//       ids_na = intersect(find_finite(beta_ix.col(1)), find_nonfinite(beta_ix.col(2)));
+//       ids_i = find(beta_ix.col(0) == i+1);
+//       ids_k = find(beta_ix.col(1) == k+1);
+//       // Gives the correct index in the beta vector
+//       ids_iter = intersect(ids_na, intersect(ids_i, ids_k));
+//       // extract first (and only element) of this vector
+//       // this is a trick so that I don't have to cast a vector to integer
+//       id = ids_iter(0);
+//       beta_ik = beta(id);
+//       // subtract 1 from j and s because it is 1-indexed
+//       second_term = second_term + beta_ik*X(i, j-1, s-1)*X(k, j-1, s-1); 
+//     }
+//   }
+//   
+//   
+//   // third part
+//   double beta_ikl;
+//   for(int i = 0; i < q-2; i++){
+//     for(int k = i+1; k < q-1; k++){
+//       for(int l = k+1; l < q; l++){
+//         ids_na = intersect(find_finite(beta_ix.col(1)), find_finite(beta_ix.col(2)));
+//         ids_i = find(beta_ix.col(0) == i+1);
+//         ids_k = find(beta_ix.col(1) == k+1);
+//         ids_l = find(beta_ix.col(2) == l+1);
+//         // Gives the correct index in the beta vector
+//         ids_iter = intersect(ids_na, intersect(ids_i, intersect(ids_k, ids_l)));
+//         // extract first (and only element) of this vector
+//         // this is a trick so that I don't have to cast a vector to integer
+//         id = ids_iter(0);
+//         beta_ikl = beta(id);
+//         // subtract 1 from j and s because it is 1-indexed
+//         third_term = third_term + beta_ikl*X(i, j-1, s-1)*X(k, j-1, s-1)*X(l, j-1, s-1);
+//       }
+//     }
+//   }
+//   
+//   Ujs = first_term + second_term + third_term;
+//   return Ujs;
+// }
