@@ -145,24 +145,76 @@ arma::mat getInformationMatrix(arma::cube X, arma::vec beta){
 
 
 // [[Rcpp::export]]
-double getLogDEfficiency(arma::cube X, arma::vec beta){
+double getLogDEfficiency(arma::cube X, arma::vec beta, int verbose){
+  
+  
+  double log_D_eff;
+  double half_log_det_I;
   
   int m = beta.n_elem;
   arma::mat I(m-1, m-1, fill::zeros);
   
   I = getInformationMatrix(X, beta);
+  if(verbose >= 5) Rcout << "Information matrix. I = \n" << I << std::endl;
+  // cx_double log_det_I = arma::log_det(I);
   
-  cx_double log_det_I = arma::log_det(I);
-  double log_D_eff;
-  
-  // If there is an imaginary part, then the output is -100000
-  if(log_det_I.imag() != 0){
-    warning("Imaginary log-det computed");
-    log_D_eff = -100000;
+  if(I.is_sympd()){
+    // If matrix is positive definite, compute Cholesky decomposition
+    // Later, there will be no need to check. It it is not positive definite, then chol fails.
+    arma::mat L = chol(I);
+    half_log_det_I = sum(log(L.diag()));
+    log_D_eff = -2*half_log_det_I/I.n_cols - log(I.n_rows);
   } else{
-    // Don't know if I should scale or just return log determinant
-    log_D_eff = -log_det_I.real()/I.n_cols - log(I.n_rows);
+    warning("I is not positive definite");
+    Rcout << "Information matrix:\n" << I << "\n";
+    Rcout << "X:\n" << X << "\n";
+    stop("I is not positive definite");
   }
+  
+  
+  // // I don't think this is the best way to handle the exception.
+  // // I'll fix it later.
+  // arma::mat L;
+  // try{
+  //   arma::mat L = chol(I);
+  // }
+  // catch(...){
+  //   Rcout << "Information matrix:\n" << I << "\n";
+  //   Rcout << "X:\n" << X << "\n";
+  //   stop("Error in Cholesky decomposition.");
+  // }
+  // half_log_det_I = sum(log(L.diag()));
+  // log_D_eff = -2*half_log_det_I/I.n_cols - log(I.n_rows);
+  
+  
+  
+  // arma::mat L;
+  // try{
+  //   arma::mat L = chol(I);
+  // }
+  // catch(const std::runtime_error& e){
+  //   Rcout << "Information matrix:\n" << I << "\n";
+  //   Rcout << "X:\n" << X << "\n";
+  //   Rcout << "Error in Cholesky decomposition with message: " << e.what() << std::endl;
+  //   arma::mat L = chol(I);
+  // }
+  // half_log_det_I = sum(log(L.diag()));
+  // log_D_eff = -2*half_log_det_I/I.n_cols - log(I.n_rows);
+  
+  
+  
+  
+  
+  // // If there is an imaginary part, then the output is -100000
+  // if(log_det_I.imag() != 0){
+  //   warning("Imaginary log-det computed");
+  //   log_D_eff = -100000;
+  //   Rcout << "Imaginary part = " << log_det_I.imag() << "\n";
+  //   Rcout << "Information matrix:\n" << I << "\n";
+  // } else{
+  //   // Don't know if I should scale or just return log determinant
+  //   log_D_eff = -log_det_I.real()/I.n_cols - log(I.n_rows);
+  // }
   
   return log_D_eff;
 }
@@ -191,7 +243,9 @@ arma::vec removeElement(vec x, int ix){
 
 
 // [[Rcpp::export]]
-arma::mat computeCoxDirection(arma::vec x, int comp, int n_points){
+arma::mat computeCoxDirection(arma::vec x, int comp, int n_points, int verbose){
+  
+  if(verbose >= 2) Rcout << "Computing Cox direction" << std::endl;
   
   int i = comp - 1;
   int q = x.n_elem;
@@ -264,10 +318,10 @@ arma::mat computeCoxDirection(arma::vec x, int comp, int n_points){
     } // end j
     
     if(any(cox_direction.row(n) < -1e-10 || cox_direction.row(n) > 1 + 1e10)) {
-      cox_direction.print();
+      Rcout << cox_direction << std::endl;
       stop("Error while computing Cox direction. Value out of bounds.\n");
-      
     }
+    
   }
   // cox_direction = unique(cox_direction)
   return(cox_direction);
@@ -317,20 +371,25 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
       X(l, k-1, s-1) = cox_dir(j, l);
     }
     
-    if(verbose > 4){
-      Rcout << "j = " << j << "(of " << n_cox_points << ")\n"; 
+    if(verbose >= 4){
+      Rcout << "\tj = " << j << " (of " << n_cox_points << "), "; 
     }
     
-    log_d_eff_j = getLogDEfficiency(X, beta);
-    if(log_d_eff_j == -100000){
-      Rcout << "Imaginary part in log-det in j = " << j << ", k = " << k << ", s = " << s << std::endl;
-    }
+    log_d_eff_j = getLogDEfficiency(X, beta, verbose);
+    
+    // if(log_d_eff_j == -100000){
+    //   Rcout << "Imaginary part in log-det in j = " << j << ", k = " << k << ", s = " << s << std::endl;
+    //   
+    //   if(verbose > 4){
+    //     Rcout << "X = " << std::endl << X << std::endl;
+    //   }
+    // }
     
     x_k = X(arma::span::all, arma::span(k-1), arma::span(s-1));
     // x_k.print();
     
-    if(verbose > 4){
-      Rcout << "d ef = "  << log_d_eff_j << "\n\n";
+    if(verbose >= 4){
+      Rcout << "log_d_eff_j = "  << log_d_eff_j << "\n";
     }
 
     // If new D-efficiency is better, then keep the new one.
@@ -374,7 +433,7 @@ Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta
   arma::vec x(q);
 
 
-  double log_d_eff_orig = getLogDEfficiency(X, beta);
+  double log_d_eff_orig = getLogDEfficiency(X, beta, verbose);
   double log_d_eff_best = log_d_eff_orig;
   double log_d_eff_aux = -1e308; // -Inf
 
@@ -390,26 +449,28 @@ Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta
     log_d_eff_aux = log_d_eff_best;
 
     for(int k = 1; k <= J; k++){
-      if(verbose >= 2) Rcout << "k = " << k << std::endl;
+      // if(verbose >= 2) Rcout << "k = " << k << std::endl;
 
       for(int s = 1; s <= S; s++){
-        if(verbose >= 2) Rcout << "\ts = " << s << std::endl;
+        // if(verbose >= 2) Rcout << "\ts = " << s << std::endl;
 
         for(int i = 0; i < q; i++){
-          if(verbose >= 2) Rcout << "\t\ti = " << i << std::endl;
+          // if(verbose >= 2) Rcout << "\t\ti = " << i << std::endl;
+          if(verbose >= 2) Rcout << "\nIter: " << it <<  ", k = " << k << ", s = " << s << ", i = " << i << std::endl;
           
           // populate x vector with corresponding ingredient proportions
           for(int l = 0; l < q; l++){
             x(l) = X(l, k-1, s-1);
           }
           
-          cox_dir = computeCoxDirection(x, i+1, n_cox_points);
+          cox_dir = computeCoxDirection(x, i+1, n_cox_points, verbose);
           X = findBestCoxDir(cox_dir, X, beta, k, s, log_d_eff_best, verbose);
-          log_d_eff_best = getLogDEfficiency(X, beta);
+          log_d_eff_best = getLogDEfficiency(X, beta, verbose);
 
-          if(verbose >= 5) {
-            // X.print(); // check later because output may not be coordinated
-            Rcout << "\t\t\tLog D-eff:" << log_d_eff_best << std::endl;
+          if(verbose >= 2) Rcout << "Log D-eff: " << log_d_eff_best << std::endl;
+            
+          if(verbose >= 5){  
+            Rcout << "X =\n" << X << std::endl;
           }
 
         } // end for i
@@ -417,8 +478,10 @@ Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta
       } // end for s
 
     } // end for k
-
-    // if(verbose >= 3) X.print();
+    
+    if(verbose >= 3) Rcout << "X =\n" << X << std::endl;
+    
+    if(verbose >= 2) Rcout << std::endl << std::endl;
 
   } // end while
 
