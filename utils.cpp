@@ -152,15 +152,30 @@ NumericMatrix transposeNumeric(const NumericMatrix & x) {
 double getScheffeLogDEfficiency(NumericMatrix X, int order){
   arma::mat X_m = getScheffe(X, order);
   arma::mat X_mT = trans(X_m);
-  arma::mat XtX = X_mT * X_m;
-  cx_double log_det_X_m = arma::log_det(XtX);
+  arma::mat I = X_mT * X_m; // Information matrix
   double log_D_eff;
   
-  // If there is an imaginary part, then the output is -Inf
-  if(log_det_X_m.imag() != 0){
-    log_D_eff = -10000000.0;
-  } else{
-    log_D_eff = log_det_X_m.real()/X_m.n_cols - log(X_m.n_rows);
+  // Attempt to do a Cholesky decomposition on the information matrix
+  arma::mat L;
+  double log_det_I;
+  try{
+    L = chol(I);
+    // Compute the determinant of information matrix using the decomposition
+    log_det_I = 2*sum(log(L.diag()));
+    log_D_eff = log_det_I/X_m.n_cols - log(X_m.n_rows);
+  }
+  catch(const std::runtime_error& e){
+    // If Cholesky decomposition fails, it is likely because information matrix
+    // was not numerically positive definite.
+    // If this happens, it is probably because a numerical inestability.
+    // The function then returns the log D efficiency as a big negative number, this 
+    // way the algorithm does nothing in this iteration because  the algorithm thinks
+    // there was no improvement when swapping the proportions.
+    Rcout << "Information matrix:\n" << I << "\n";
+    Rcout << "X:\n" << X << "\n";
+    Rcout << "Error in Cholesky decomposition with message: " << e.what() << std::endl;
+    log_D_eff = -10000;
+    Rcout << "Returning log_D_eff = " << log_D_eff << std::endl;
   }
   
   return log_D_eff;
