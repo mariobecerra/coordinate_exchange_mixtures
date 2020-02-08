@@ -2,94 +2,104 @@
 
 library(Rcpp)
 library(tidyverse)
+library(ggtern)
 
+source("utils_MNL.R")
 sourceCpp("utils_MNL.cpp")
 
 
 
-create_random_initial_MNL_design = function(q, J, S, seed = NULL){
-  X = array(rep(NA_real_, q*J*S), dim = c(q, J, S))
+
+q = 3
+J = 5
+S = 3
+X2 = create_random_initial_MNL_design(q, J, S, seed = 4)
+beta2 = rep(0, (q*q*q + 5*q)/6)
+
+(Xs2_1 = getXs(X2, 1))
+(Xs2_2 = getXs(X2, 2))
+(Xs2_3 = getXs(X2, 3))
+
+(ps2_1 = getPs(X2, beta2, 1, Xs2_1))
+(ps2_2 = getPs(X2, beta2, 2, Xs2_2))
+(ps2_3 = getPs(X2, beta2, 3, Xs2_3))
+
+middle2_1 = create_diag_mat(ps2_1) - ps2_1 %*% t(ps2_1)
+middle2_2 = create_diag_mat(ps2_2) - ps2_2 %*% t(ps2_2)
+middle2_3 = create_diag_mat(ps2_3) - ps2_3 %*% t(ps2_3)
+
+(I2_1 = t(Xs2_1) %*% middle2_1 %*% Xs2_1)
+(I2_2 = t(Xs2_2) %*% middle2_2 %*% Xs2_2)
+(I2_3 = t(Xs2_3) %*% middle2_3 %*% Xs2_3)
+
+I2_1 + I2_2 + I2_3
+
+getInformationMatrix(X2, beta2)
+(I2_1 + I2_2 + I2_3) == getInformationMatrix(X2, beta2)
+
+getLogDEfficiency(X2, beta2, 1)
+determinant(I2_1 + I2_2 + I2_3)
+
+findBestCoxDir(computeCoxDirection(X2[, 1,1], 1, 10), X2, beta2, 1, 1, 100000, 1)
+
+X2_opt = mixtureCoordinateExchangeMixtureMNL(
+  X_orig = X2, 
+  beta = beta2, 
+  n_cox_points = 5, 
+  max_it = 2, 
+  verbose = 5
+)
+
   
-  if(!is.null(seed)) set.seed(seed)
-  
-  for(j in 1:J){
-    for(s in 1:S){
-      rands = runif(q)
-      # ingerdients must sum up to 1
-      X[,j, s] = rands/sum(rands)
-    }
-  }
-  
-  return(X)
-}
+X2_opt2 = mnl_mixture_coord_ex(
+  X = X2, 
+  beta = beta2, 
+  n_cox_points = 5, 
+  max_it = 2, 
+  verbose = 5
+)
 
 
 
 
-create_random_beta = function(q){
-  beta_1 = rnorm(q)
-  
-  beta_2 = rnorm(q*(q-1)/2)
-  
-  beta_3 = rnorm(q*(q-1)*(q-2)/6)
-  beta = c(beta_1, beta_2, beta_3)
-  
-  n = (q*q*q+5*q)/6
-  
-  # Just in case my formula is wrong:
-  if(length(beta) != n) stop("Error in dimensions")
-  
-  beta_ix = matrix(rep(NA_integer_, 3*n), ncol = 3)
-  colnames(beta_ix) = c("i", "k", "l")
-  
-  
-  
-  
-  beta_ix[1:q, "i"] = 1:q
-  counter = q
-  
-  for(i in 1:(q-1)){
-    for(k in (i+1):(q)){
-      counter = counter + 1
-      beta_ix[counter, "i"] = i
-      beta_ix[counter, "k"] = k
-    }
-  }
-  
-  for(i in 1:(q-2)){
-    for(k in (i+1):(q-1)){
-      for(l in (k+1):(q)){
-        counter = counter + 1
-        beta_ix[counter, "i"] = i
-        beta_ix[counter, "k"] = k
-        beta_ix[counter, "l"] = l
-      }
-    }
-  }
-  
-  return(list(beta = beta, beta_ix = beta_ix))
-}
+
+
+
+
 
 
 q = 3
-J = 4
-S = 2
-X = create_random_initial_MNL_design(q, J, S, seed = 4)
-beta = create_random_beta(q)
+J = 5
+S = 4
+X3 = create_random_initial_MNL_design(q, J, S, seed = 3)
+beta3 = rep(0, (q*q*q + 5*q)/6)
+beta3_2 = create_random_beta(q)
 
-# sapply(1:4, function(i) getUjs(X, beta$beta, beta$beta_ix, i, 1))
-(Xs = getXs(X, 1))
-getUs(X, beta$beta, 1, Xs) %>% as.numeric()
-getPs(X, beta$beta, 1, Xs)
-
-getInformationMatrix(X, beta$beta)
-getLogDEfficiency(X, beta$beta)
-
-aaa = findBestCoxDir(computeCoxDirection(X[, 1,1], 1, 10), X, beta$beta, 1, 1, 100000)
-
-bbbb = mixtureCoordinateExchangeMixtureMNL(
-  X, beta$beta, 100, 2, 5
+X3_opt = mnl_mixture_coord_ex(
+  X = X3, 
+  beta = beta3, 
+  n_cox_points = 100, 
+  max_it = 10, 
+  verbose = 1, 
+  plot_designs = T
 )
+
+
+X3_2_opt = mnl_mixture_coord_ex(
+  X = X3, 
+  beta = beta3_2$beta, 
+  n_cox_points = 100, 
+  max_it = 10, 
+  verbose = 1, 
+  plot_designs = T
+)
+
+
+
+
+
+
+
 
 
 
