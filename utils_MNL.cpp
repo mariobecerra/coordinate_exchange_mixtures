@@ -146,7 +146,7 @@ arma::mat getInformationMatrix(arma::cube X, arma::vec beta){
 
 // [[Rcpp::export]]
 double getLogDEfficiency(arma::cube X, arma::vec beta, int verbose){
-  
+  //  The D-optimality criterion seeks to maximize the determinant of the information matrix.
   
   double log_D_eff;
   double half_log_det_I;
@@ -156,65 +156,24 @@ double getLogDEfficiency(arma::cube X, arma::vec beta, int verbose){
   
   I = getInformationMatrix(X, beta);
   if(verbose >= 5) Rcout << "Information matrix. I = \n" << I << std::endl;
-  // cx_double log_det_I = arma::log_det(I);
   
-  if(I.is_sympd()){
-    // If matrix is positive definite, compute Cholesky decomposition
-    // Later, there will be no need to check. It it is not positive definite, then chol fails.
+  arma::mat L;
+  try{
     arma::mat L = chol(I);
     half_log_det_I = sum(log(L.diag()));
-    log_D_eff = -2*half_log_det_I/I.n_cols - log(I.n_rows);
-  } else{
-    warning("I is not positive definite");
+    // Don't know if I should scale or just return log determinant
+    // Right now it just returns the log determinant.
+    // This line scales it:
+    // log_D_eff = 2*half_log_det_I/I.n_cols - log(I.n_rows);
+    log_D_eff = 2*half_log_det_I;
+  }
+  catch(const std::runtime_error& e){
+    // I don't think this is the best way to handle the exception.
+    Rcout << "Error in Cholesky decomposition\n";
     Rcout << "Information matrix:\n" << I << "\n";
     Rcout << "X:\n" << X << "\n";
-    stop("I is not positive definite");
+    stop("Error in Cholesky decomposition with message: ", e.what(), "\n");
   }
-  
-  
-  // // I don't think this is the best way to handle the exception.
-  // // I'll fix it later.
-  // arma::mat L;
-  // try{
-  //   arma::mat L = chol(I);
-  // }
-  // catch(...){
-  //   Rcout << "Information matrix:\n" << I << "\n";
-  //   Rcout << "X:\n" << X << "\n";
-  //   stop("Error in Cholesky decomposition.");
-  // }
-  // half_log_det_I = sum(log(L.diag()));
-  // log_D_eff = -2*half_log_det_I/I.n_cols - log(I.n_rows);
-  
-  
-  
-  // arma::mat L;
-  // try{
-  //   arma::mat L = chol(I);
-  // }
-  // catch(const std::runtime_error& e){
-  //   Rcout << "Information matrix:\n" << I << "\n";
-  //   Rcout << "X:\n" << X << "\n";
-  //   Rcout << "Error in Cholesky decomposition with message: " << e.what() << std::endl;
-  //   arma::mat L = chol(I);
-  // }
-  // half_log_det_I = sum(log(L.diag()));
-  // log_D_eff = -2*half_log_det_I/I.n_cols - log(I.n_rows);
-  
-  
-  
-  
-  
-  // // If there is an imaginary part, then the output is -100000
-  // if(log_det_I.imag() != 0){
-  //   warning("Imaginary log-det computed");
-  //   log_D_eff = -100000;
-  //   Rcout << "Imaginary part = " << log_det_I.imag() << "\n";
-  //   Rcout << "Information matrix:\n" << I << "\n";
-  // } else{
-  //   // Don't know if I should scale or just return log determinant
-  //   log_D_eff = -log_det_I.real()/I.n_cols - log(I.n_rows);
-  // }
   
   return log_D_eff;
 }
@@ -337,14 +296,14 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
   // k: Cox direction index (1 to q)
   // s: choice set (1 to S)
   
-  // Create new cube, otherwise it is modified in R too
-  arma::cube X = X_in;
+  // // Create new cube, otherwise it is modified in R too
+  // arma::cube X = X_in;
   
-  // // Create new cube
-  // arma::cube X(size(X_in));
-  // 
-  // // copy elements of cube
-  // X = X_in;
+  // Create new cube
+  arma::cube X(size(X_in));
+
+  // copy elements of cube
+  X = X_in;
   
   
   // int J = X.n_cols;
@@ -354,14 +313,14 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
   // NumericVector x_k(X.ncol());
   arma::vec x_k(q);
 
-
+  
 
   
   double log_d_eff_j;
   int n_cox_points = cox_dir.n_rows;
   
   for(int j = 0; j < n_cox_points; j++){
-  
+    x_k = X(arma::span::all, arma::span(k-1), arma::span(s-1));
     // same as:
     // X(arma::span::all, arma::span(k-1), arma::span(s-1)) = cox_dir.row(j);
     // if the previous worked
@@ -377,28 +336,21 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
     
     log_d_eff_j = getLogDEfficiency(X, beta, verbose);
     
-    // if(log_d_eff_j == -100000){
-    //   Rcout << "Imaginary part in log-det in j = " << j << ", k = " << k << ", s = " << s << std::endl;
-    //   
-    //   if(verbose > 4){
-    //     Rcout << "X = " << std::endl << X << std::endl;
-    //   }
-    // }
-    
-    x_k = X(arma::span::all, arma::span(k-1), arma::span(s-1));
-    // x_k.print();
-    
     if(verbose >= 4){
       Rcout << "log_d_eff_j = "  << log_d_eff_j << "\n";
     }
+    
+    if(verbose >= 6){
+      Rcout << "X (with swapped vector) = \n"  << X << "\n";
+    }
 
-    // If new D-efficiency is better, then keep the new one.
-    // If it's not, keep the old one.
+    //  The D-optimality criterion seeks to maximize the determinant of the information matrix.
+    // If new D-efficiency is better, then keep the new one. If it's not, keep the old one.
     if(log_d_eff_j > log_d_eff_best) {
-      // This design has a better D-efficiency, so we update the best value
+      // This design has a better D-efficiency, so we keep the design and update the best value
       log_d_eff_best = log_d_eff_j;
     } else{
-      // return to old state
+      // This design does not have a better D-efficiency, so we return to the old design.
       for(int l = 0; l < q; l++){
         X(l, k-1, s-1) = x_k(l);
       }
@@ -415,7 +367,7 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
 
 
 // [[Rcpp::export]]
-Rcpp::List mixtureCoordinateExchangeMixtureMNL(arma::cube X_orig, arma::vec beta, int n_cox_points, int max_it, int verbose){
+Rcpp::List mixtureCoordinateExchangeMNL(arma::cube X_orig, arma::vec beta, int n_cox_points, int max_it, int verbose){
 
   // Should add some code to check the input dimensions
 
