@@ -16,22 +16,25 @@ mnl_mixture_coord_ex = function(X, beta, n_cox_points = 100, max_it = 50, plot_d
   #    4: Print log D efficiency for each point in the Cox direction discretization
   #    5: Print the resulting X and information matrix after each subiteration
   #    6: Print the resulting X or each point in the Cox direction discretization
+  # Returns alist with the following objects:
+  #    X_orig: The original design. Array with dimensions (q, J, S).
+  #    X: The optimized design. Array with dimensions (q, J, S).
+  #    d_eff_orig: log D-efficiency of the original design.
+  #    d_eff: log D-efficiency of the optimized design.
+  #    n_iter: Number of iterations performed.
   
   
   # Some input checks
-  
   dim_X = dim(X)
   
   if(length(dim_X) != 3) stop("X must be a 3 dimensional array.")
   if(!is.vector(beta)) stop("beta is not a vector. It must be a numerical or integer vector.")
   if(!(is.numeric(beta) | !is.integer(beta))) stop("beta is not numeric or integer. It must be a numerical or integer vector.")
   
-  # J = dim_X[2]
   q = dim_X[1]
   m = (q*q*q + 5*q)/6
   
   if(m != length(beta)) stop("Incompatible length in beta and q: beta must be of length (q^3 + 5*q)/6")
-  
   
   # Call to C++ function
   X_result = mixtureCoordinateExchangeMNL(
@@ -42,17 +45,6 @@ mnl_mixture_coord_ex = function(X, beta, n_cox_points = 100, max_it = 50, plot_d
     verbose = verbose
   )
   
-  if(verbose >= 1){
-    cat("\n")
-    cat("Original log D-efficiency: ", X_result$d_eff_orig)
-    cat("\n")
-    cat("Final log D-efficiency: ", X_result$d_eff)
-    cat("\n")
-    cat("Number of iterations: ", X_result$n_iter)
-    cat("\n")
-  } 
-  
-  
   out_list = list(
     X_orig = X_result$X_orig,
     X = X_result$X,
@@ -62,13 +54,10 @@ mnl_mixture_coord_ex = function(X, beta, n_cox_points = 100, max_it = 50, plot_d
   )
   
   if(plot_designs) {
-    
     if(q == 3) mnl_plot_result(out_list)
     else warning("Could not plot results because q != 3")
   }
-  
   return(out_list)
-  
 }
 
 
