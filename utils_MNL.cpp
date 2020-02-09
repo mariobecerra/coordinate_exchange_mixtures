@@ -8,18 +8,25 @@ using namespace arma;
 
 
 
+
+
 // [[Rcpp::export]]
 arma::mat getXs(arma::cube X, int s){
-  
+  // Function that returns the design matrix of choice set s.
+  // Final matrix is of dimension (J, m-1) with m = (q^3 + 5*q)/6
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input should be a design cube X of dimensions (q, J, S) and integer s, corresponding to a choice set in 1 to S.
   int q = X.n_rows;
   int J = X.n_cols;
   int m = (q*q*q + 5*q)/6;
   
-  // arma::mat Xs(J, m);
+  // Initialize array with zeros
   arma::mat Xs(J, m-1, fill::zeros);
   
+  // Column counter. Equation has three terms, so the final matrix is populated in three parts.
   int col_counter = 0;
   
+  // First part
   for(int i = 0; i < q-1; i++){
     for(int j = 0; j < J; j++){
       // subtract 1 from s because it is 1-indexed
@@ -27,7 +34,6 @@ arma::mat getXs(arma::cube X, int s){
     }
     col_counter++;
   }
-  
   
   // second part
   for(int i = 0; i < q-1; i++){
@@ -38,9 +44,7 @@ arma::mat getXs(arma::cube X, int s){
       col_counter++;
     }
   }
-
-
-
+  
   // third part
   for(int i = 0; i < q-2; i++){
     for(int k = i+1; k < q-1; k++){
@@ -52,35 +56,43 @@ arma::mat getXs(arma::cube X, int s){
       }
     }
   }
-  
-  // Xs.print();
-  
+
   return Xs;
-  
 }
+
+
 
 
 // [[Rcpp::export]]
 arma::vec getUs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
+  // Function that returns the utility vector of choice set s.
+  // Final vector is of length J.
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     X: design cube of dimensions (q, J, S) 
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
+  //     s: integer s, corresponding to a choice set in 1 to S.
+  //     Xs: design matrix of choice set s. Must be of dimension (J, m-1), with m = (q^3 + 5*q)/6
+  
   int J = X.n_cols;
   int q = X.n_rows;
   
-  // arma::mat Xs = getXs(X, s);
-  int m = Xs.n_cols + 1;
+  int m = Xs.n_cols + 1; // m = (q^3 + 5*q)/6
+  
+  // Check input dimensions
   if(m != beta.n_elem) stop("Incompatible q in beta and X");
   
+  // Create auxiliary vector
   arma::vec beta2(m-1);
+  
   // compute beta_i_star = beta_i - beta_q
   for(int i = 0; i < q-1; i++){
     beta2(i) = beta(i) - beta(q-1);
-    // Rcout << "beta_star_" << i << ": " << beta2(i) << std::endl;
   }
   
   for(int i = q-1; i < m-1; i++){
     beta2(i) = beta(i+1);
-    // Rcout << "beta2_" << i << ": " << beta2(i) << std::endl;
   }
-  
   
   arma::vec Us(J);
   
@@ -91,6 +103,15 @@ arma::vec getUs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
 
 // [[Rcpp::export]]
 arma::vec getPs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
+  // Function that returns the probability vector of choice set s, based on the softmax function.
+  // Final vector is of length J.
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     X: design cube of dimensions (q, J, S) 
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
+  //     s: integer s, corresponding to a choice set in 1 to S.
+  //     Xs: design matrix of choice set s. Must be of dimension (J, m-1), with m = (q^3 + 5*q)/6
+  
   int J = X.n_cols;
 
   arma::vec Us(J);
@@ -99,15 +120,14 @@ arma::vec getPs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
   arma::vec exp_Ujs(J);
   arma::vec P(J);
   
-  // exp_Ujs = exp(Us);
   // subtracting the maximum value to avoid numerical overflow
   exp_Ujs = exp(Us - max(Us));
   
   double sum_exp_Ujs = sum(exp_Ujs);
   
-  
   P = exp_Ujs/sum_exp_Ujs;
   
+  // Check for numerical inestabilities
   if(abs(sum(P) - 1) > 1e-10) warning("Sum may not be numerically equal to 1.");
 
   return P;
@@ -119,6 +139,14 @@ arma::vec getPs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
 
 // [[Rcpp::export]]
 arma::mat getInformationMatrix(arma::cube X, arma::vec beta){
+  // Function that returns the information matrix for design cube X and parameter vector beta.
+  // It is the sum of the information matrices of the S choice sets.
+  // Final matrix is of dimension (m-1, m-1), with m = (q^3 + 5*q)/6
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     X: design cube of dimensions (q, J, S) 
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
+  
   int J = X.n_cols;
   int S = X.n_elem/(X.n_cols*X.n_rows);
   int m = beta.n_elem;
@@ -130,6 +158,7 @@ arma::mat getInformationMatrix(arma::cube X, arma::vec beta){
   arma::mat middle(J, J);
   arma::vec ps;
 
+  // Compute information matrix for each choice set s, and sum.
   for(int s = 1; s <= S; s++){
     Xs = getXs(X, s);
     ps = getPs(X, beta, s, Xs);;
@@ -138,15 +167,22 @@ arma::mat getInformationMatrix(arma::cube X, arma::vec beta){
     middle.diag() = ps_ps_t.diag() - ps;
     I = I - (Xs.t())*middle*Xs;
   }
-  
   return I;
-
 }
+
+
 
 
 // [[Rcpp::export]]
 double getLogDEfficiency(arma::cube X, arma::vec beta, int verbose){
-  //  The D-optimality criterion seeks to maximize the determinant of the information matrix.
+  // Function that returns the log D efficiency for design cube X and parameter vector beta.
+  // The D-optimality criterion seeks to maximize the determinant of the information matrix.
+  // This function computes the log determinant of the information matrix using a Choleski decomposition.
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     X: design cube of dimensions (q, J, S) 
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
+  //     verbose: integer that expresses the level of verbosity. Mainly used in other functions and too much useful by itself.
   
   double log_D_eff;
   double half_log_det_I;
@@ -182,18 +218,23 @@ double getLogDEfficiency(arma::cube X, arma::vec beta, int verbose){
 
 
 arma::vec removeElement(vec x, int ix){
+  // Auxiliary function.
+  // Given a vector x, returns a vector out without the element with index ix.
+  // Note: this is 0-based indexing like in C++ and not 1-based indexing like in R
   int n = x.n_elem;
   vec out;
+  // If ix is not the first or last element
   if(ix != 0 & ix != n-1){
     out = join_vert(x.subvec(0, ix-1), x.subvec(ix + 1, n-1)); 
   } else{
     if(ix == 0){
+      // If ix is the first element
       out = x.subvec(1, n-1); 
     } else{
+      // If ix is the last element
       out = x.subvec(0, n-2); 
     }
   }
-  
   return(out);
 }
 
@@ -203,86 +244,83 @@ arma::vec removeElement(vec x, int ix){
 
 // [[Rcpp::export]]
 arma::mat computeCoxDirection(arma::vec x, int comp, int n_points, int verbose){
+  // Function that returns a discretization of the Cox direction for vector x in component comp.
+  // Returns a matrix of dimension (cox_dir_n_elems, q), where cox_dir_n_elems is roughly equal to n_points and q is the length of x.
+  // Input: 
+  //     x: q dimensional vector of proportions. Must sum up to 1. 
+  //        There's no input check of this because this operation is done many times in the coordinate exchange algorithm and because the x vector is fed by another function.
+  //     comp: component in which the Cox direction is computed. Must be an integer between 1 and q.
+  //     n_points: Number of points to use in the discretization.
+  //     verbose: integer that expresses the level of verbosity. Mainly used in other functions and too much useful by itself.
   
   if(verbose >= 2) Rcout << "Computing Cox direction" << std::endl;
   
   int i = comp - 1;
   int q = x.n_elem;
   
-  //   # points in Cox's direction
-  //   seq_points = seq(from = 0, to = 1, length.out = n_points)
+  //   points in Cox's direction
   vec seq_points = linspace<vec>(0, 1, n_points);
   
-  //   diffs = seq_points - x[i]
   vec diffs = seq_points - x(i);
   
-  // ix1 = which.min(abs(diffs))
   int ix1 = index_min(abs(diffs));
   
-  //   cox_direction_aux = seq_points - diffs[ix1]
-  //   cox_direction_aux2 = cox_direction_aux[-ix1]
-  //   betw_0_1 = cox_direction_aux2 >= 0 & cox_direction_aux2 <= 1
-  //   cox_direction_aux3 = c(0, cox_direction_aux2[betw_0_1], 1)
-  vec cox_direction_aux = seq_points - diffs(ix1);
+  // Auxiliary vector 1
+  vec cox_direction_aux_1 = seq_points - diffs(ix1);
   
-  // vec cox_direction_aux2(cox_direction_aux.n_elem - 1);
-  // // copy all elements of cox_direction_aux except the one with index ix1
-  // // the equivalent in R: cox_direction_aux2 = cox_direction_aux[-ix1]
-  // // could not find a simpler way to do it with Armadillo
-  // int aux_int = 0;
-  // for(int j = 0; j < cox_direction_aux.n_elem - 1; j++){
-  //   if(j != ix1) cox_direction_aux2(j) = cox_direction_aux(aux_int);
-  //   aux_int++;
-  // }
-  vec cox_direction_aux2 = removeElement(cox_direction_aux, ix1);
+  // Auxiliary vector 2
+  // copy all elements of cox_direction_aux_1 except the one with index ix1
+  // the equivalent in R: cox_direction_aux_2 = cox_direction_aux_1[-ix1]
+  vec cox_direction_aux_2 = removeElement(cox_direction_aux_1, ix1);
   
-  uvec bigger_zero = find(cox_direction_aux2 >= 0);
-  uvec less_one = find(cox_direction_aux2 <= 1);
-  uvec betw_0_1 = intersect(bigger_zero, less_one);
-  vec cox_direction_aux3 = join_vert(zeros(1), cox_direction_aux2.elem(betw_0_1), ones(1));
+  uvec bigger_zero = find(cox_direction_aux_2 >= 0); // indices of elements bigger than 0
+  uvec less_one = find(cox_direction_aux_2 <= 1); // indices of elements less than 1
+  uvec betw_0_1 = intersect(bigger_zero, less_one); // indices of elements between 0 and 1
   
-  int cox_dir_n_elems = cox_direction_aux3.n_elem;
-  // if repeated elements
-  // if(cox_direction_aux3(1) == 0) cox_direction_aux3 = removeElement(cox_direction_aux3, 1);
-  // if(cox_direction_aux3(cox_dir_n_elems-2) == 1) cox_direction_aux3 = removeElement(cox_direction_aux3, cox_dir_n_elems-2);
+  // Auxiliary vector 3
+  vec cox_direction_aux_3 = join_vert(zeros(1), cox_direction_aux_2.elem(betw_0_1), ones(1));
   
-  // cox_direction = matrix(rep(NA_real_, q*length(cox_direction_aux3)), ncol = q)
+  // Number of elements in final vector
+  int cox_dir_n_elems = cox_direction_aux_3.n_elem;
+  
+  // Initialize final matrix with random numbers
   arma::mat cox_direction = arma::mat(cox_dir_n_elems, q, fill::randu);
   
+  // Fill corresponding column
+  cox_direction.col(i) = cox_direction_aux_3;
   
+  // Vector of differences
+  vec deltas = cox_direction_aux_3 - x(i);
   
-  // cox_direction[,i] = cox_direction_aux3
-  cox_direction.col(i) = cox_direction_aux3;
-  
-  
-  // deltas = cox_direction_aux3 - x[i]
-  vec deltas = cox_direction_aux3 - x(i);
-  
+  // Fill matrix
   for(int n = 0; n < cox_dir_n_elems; n++){
+    
     // recompute proportions:
     vec setDiff_aux = linspace<vec>(0, q-1, q);
     vec setDiff = removeElement(setDiff_aux, i);
     int j;
-    double res;
+    double result;
+    
+    // Iterate over ingredient proportions
     for(int j_aux = 0; j_aux < setDiff.n_elem; j_aux++){
       j = setDiff(j_aux);
-      // In case it's a corner case, i.e., x[i] = 1
-      if(abs(1 - x(i)) < 1e-16) res = (1 - cox_direction(n, i))/(q-1);
-      else{
-        res = x(j) - deltas(n)*x(j)/(1 - x(i));
+      if(abs(1 - x(i)) < 1e-16) {
+        // In case x(i) is numerically 1
+        result = (1 - cox_direction(n, i))/(q-1);
+      } else{
+        // In case x(i) is not numerically 1
+        result = x(j) - deltas(n)*x(j)/(1 - x(i));
       }
-      // if(res < -1e-10 | )
-      cox_direction(n, j) = res;
+      cox_direction(n, j) = result;
       j++;
-    } // end j
+    } // end for j
     
+    // Check that the computed directions are not smaller than 0 or bigger than 1 because of numerical error
     if(any(cox_direction.row(n) < -1e-10 || cox_direction.row(n) > 1 + 1e10)) {
       Rcout << cox_direction << std::endl;
       stop("Error while computing Cox direction. Value out of bounds.\n");
     }
-    
-  }
-  // cox_direction = unique(cox_direction)
+  } // end for n
   return(cox_direction);
 }
 
@@ -292,30 +330,24 @@ arma::mat computeCoxDirection(arma::vec x, int comp, int n_points, int verbose){
 
 // [[Rcpp::export]]
 arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, int k, int s, double log_d_eff_best, int verbose) {
-
-  // k: Cox direction index (1 to q)
-  // s: choice set (1 to S)
+  // Function that returns the design that maximizes the D-efficiency.
+  // Returns a cube of dimension (q, J, S) with a design that maximizes the value of the log D-efficiency.
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     cox_dir: Matrix with Cox direction with q columns. Each row sums up to 1.
+  //     X_in: design cube of dimensions (q, J, S).
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6.
+  //     k: Cox direction index (1 to q).
+  //     s: integer s, corresponding to a choice set in 1 to S.
+  //     log_d_eff_best: log D-efficiecy with which the new efficiencies are compared to.
+  //     verbose: integer that expresses the level of verbosity. Mainly used in other functions and too much useful by itself.
   
   // // Create new cube, otherwise it is modified in R too
-  // arma::cube X = X_in;
-  
-  // Create new cube
-  arma::cube X(size(X_in));
+  arma::cube X = X_in;
 
-  // copy elements of cube
-  X = X_in;
-  
-  
-  // int J = X.n_cols;
   int q = X.n_rows;
-  // int S = X.n_elem/(X.n_cols*X.n_rows);
-
-  // NumericVector x_k(X.ncol());
+  
   arma::vec x_k(q);
-
-  
-
-  
   double log_d_eff_j;
   int n_cox_points = cox_dir.n_rows;
   
@@ -324,8 +356,7 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
     // same as:
     // X(arma::span::all, arma::span(k-1), arma::span(s-1)) = cox_dir.row(j);
     // if the previous worked
-    // Basically, here we replace the j-th row of the Cox direction matrix
-    // in the corresponding slice and row of X
+    // Basically, here we replace the j-th row of the Cox direction matrix in the corresponding slice and row of X
     for(int l = 0; l < q; l++){
       X(l, k-1, s-1) = cox_dir(j, l);
     }
@@ -354,10 +385,8 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
       for(int l = 0; l < q; l++){
         X(l, k-1, s-1) = x_k(l);
       }
-      
     }
   }
-
   return X;
 }
 
@@ -368,8 +397,30 @@ arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, in
 
 // [[Rcpp::export]]
 Rcpp::List mixtureCoordinateExchangeMNL(arma::cube X_orig, arma::vec beta, int n_cox_points, int max_it, int verbose){
-
-  // Should add some code to check the input dimensions
+  // Performs the coordinate exchange algorithm for a Multinomial Logit Scheffé model.
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // X: 3 dimensional cube with dimensions (q, J, S) where:
+  //    q is the number of ingredient proportions
+  //    J is the number of alternatives within a choice set
+  //    S is the number of choice sets
+  // beta: vector of parameters. Should be of length (q^3 + 5*q)/6.
+  // n_cox_points: Number of points to use in the discretization of Cox direction.
+  // max_it: Maximum number of iteration that the coordinate exchange algorithm will do.
+  // verbose: level of verbosity. 6 levels, in which level prints the previous plus additional things:
+  //    1: Print the log D efficiency in each iteration and a final summary
+  //    2: Print the values of k, s, i, and log D efficiency in each subiteration
+  //    3: Print the resulting X after each iteration, i.e., after each complete pass on the data
+  //    4: Print log D efficiency for each point in the Cox direction discretization
+  //    5: Print the resulting X and information matrix after each subiteration
+  //    6: Print the resulting X or each point in the Cox direction discretization
+  // Returns an Rcpp::List object with the following objects:
+  //    X_orig: The original design. Cube with dimensions (q, J, S).
+  //    X: The optimized design. Cube with dimensions (q, J, S).
+  //    d_eff_orig: log D-efficiency of the original design.
+  //    d_eff: log D-efficiency of the optimized design.
+  //    n_iter: Number of iterations performed.
+  
+  // Does not do input checks because the R wrapper function does them.
 
   // Create new cube, otherwise it is modified in R too
   arma::cube X = X_orig;
