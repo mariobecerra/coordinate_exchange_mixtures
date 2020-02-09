@@ -1,10 +1,39 @@
 
 mnl_mixture_coord_ex = function(X, beta, n_cox_points = 100, max_it = 50, plot_designs = F, verbose = 1){
+  # Performs the coordinate exchange algorithm for a Multinomial Logit Scheffé model.
+  # X: 3 dimensional array with dimensions (q, J, S) where:
+  #    q is the number of ingredient proportions
+  #    J is the number of alternatives within a choice set
+  #    S is the number of choice sets
+  # beta: vector of parameters. Should be of length (q^3 + 5*q)/6
+  # n_cox_points: Number of points to use in the discretization of Cox direction
+  # max_it: Maximum number of iteration that the coordinate exchange algorithm will do
+  # plot_designs: If TRUE, shows a plot of the initial and the final design. Only works if q is 3.
+  # verbose: level of verbosity. 6 levels, in which level prints the previous plus additional things:
+  #    1: Print the log D efficiency in each iteration and a final summary
+  #    2: Print the values of k, s, i, and log D efficiency in each subiteration
+  #    3: Print the resulting X after each iteration, i.e., after each complete pass on the data
+  #    4: Print log D efficiency for each point in the Cox direction discretization
+  #    5: Print the resulting X and information matrix after each subiteration
+  #    6: Print the resulting X or each point in the Cox direction discretization
   
-  # Add some input checks
   
-  q = dim(X)[1]
+  # Some input checks
   
+  dim_X = dim(X)
+  
+  if(length(dim_X) != 3) stop("X must be a 3 dimensional array.")
+  if(!is.vector(beta)) stop("beta is not a vector. It must be a numerical or integer vector.")
+  if(!(is.numeric(beta) | !is.integer(beta))) stop("beta is not numeric or integer. It must be a numerical or integer vector.")
+  
+  # J = dim_X[2]
+  q = dim_X[1]
+  m = (q*q*q + 5*q)/6
+  
+  if(m != length(beta)) stop("Incompatible length in beta and q: beta must be of length (q^3 + 5*q)/6")
+  
+  
+  # Call to C++ function
   X_result = mixtureCoordinateExchangeMNL(
     X_orig = X, 
     beta = beta, 
@@ -45,12 +74,17 @@ mnl_mixture_coord_ex = function(X, beta, n_cox_points = 100, max_it = 50, plot_d
 
 
 mnl_plot_result = function(res_alg){
+  # res_alg: output of a call to mnl_mixture_coord_ex() function.
+  # It must be a design of 3 ingredients.
+  
+  dim_X = dim(res_alg$X_orig)
+  q = dim_X[1]
+  S = dim_X[3]
+  
+  if(q != 3) stop("Design must be of 3 ingredients.")
+  
   library(ggtern)
   
-  # res_alg: output of a call to mnl_mixture_coord_ex() function
-  
-  # q = dim(res_alg$X_orig)[1]
-  S = dim(res_alg$X_orig)[3]
   
   # Convert 3 dimensional arrays into matrices by vertically binding them
   X_orig_mat = t(res_alg$X_orig[,,1])
@@ -93,6 +127,8 @@ mnl_plot_result = function(res_alg){
 
 
 create_random_initial_MNL_design = function(q, J, S, seed = NULL){
+  # Creates a random initial design of the specified dimensions
+  # Returns a 3-dimensional array of dimensions (q, J, S)
   X = array(rep(NA_real_, q*J*S), dim = c(q, J, S))
   
   if(!is.null(seed)) set.seed(seed)
@@ -112,6 +148,9 @@ create_random_initial_MNL_design = function(q, J, S, seed = NULL){
 
 
 create_random_beta = function(q){
+  # Creates a random parameter vector.
+  # Returns a list in which the first element of the list is a numerical vector with the parameters and the second element is a matrix with the indices as in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  
   beta_1 = rnorm(q)
   
   beta_2 = rnorm(q*(q-1)/2)
@@ -151,3 +190,5 @@ create_random_beta = function(q){
   
   return(list(beta = beta, beta_ix = beta_ix))
 }
+
+
