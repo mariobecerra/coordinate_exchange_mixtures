@@ -11,7 +11,7 @@ using namespace arma;
 
 
 // [[Rcpp::export]]
-arma::mat getXs(arma::cube X, int s){
+arma::mat getXs(arma::cube& X, int s){
   // Function that returns the design matrix of choice set s.
   // Final matrix is of dimension (J, m-1) with m = (q^3 + 5*q)/6
   // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
@@ -64,7 +64,7 @@ arma::mat getXs(arma::cube X, int s){
 
 
 // [[Rcpp::export]]
-arma::vec getUs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
+arma::vec getUs(arma::cube& X, arma::vec& beta, int s, arma::mat& Xs){
   // Function that returns the utility vector of choice set s.
   // Final vector is of length J.
   // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
@@ -102,7 +102,7 @@ arma::vec getUs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
 
 
 // [[Rcpp::export]]
-arma::vec getPs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
+arma::vec getPs(arma::cube& X, arma::vec& beta, int s, arma::mat& Xs){
   // Function that returns the probability vector of choice set s, based on the softmax function.
   // Final vector is of length J.
   // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
@@ -138,7 +138,7 @@ arma::vec getPs(arma::cube X, arma::vec beta, int s, arma::mat Xs){
 
 
 // [[Rcpp::export]]
-arma::mat getInformationMatrix(arma::cube X, arma::vec beta){
+arma::mat getInformationMatrix(arma::cube& X, arma::vec& beta){
   // Function that returns the information matrix for design cube X and parameter vector beta.
   // It is the sum of the information matrices of the S choice sets.
   // Final matrix is of dimension (m-1, m-1), with m = (q^3 + 5*q)/6
@@ -174,7 +174,7 @@ arma::mat getInformationMatrix(arma::cube X, arma::vec beta){
 
 
 // [[Rcpp::export]]
-double getLogDEfficiency(arma::cube X, arma::vec beta, int verbose){
+double getLogDEfficiency(arma::cube& X, arma::vec& beta, int verbose){
   // Function that returns the log D efficiency for design cube X and parameter vector beta.
   // The D-optimality criterion seeks to maximize the determinant of the information matrix.
   // This function computes the log determinant of the information matrix using a Choleski decomposition.
@@ -243,7 +243,7 @@ arma::vec removeElement(vec x, int ix){
 
 
 // [[Rcpp::export]]
-arma::mat computeCoxDirection(arma::vec x, int comp, int n_points, int verbose){
+arma::mat computeCoxDirection(arma::vec& x, int comp, int n_points, int verbose){
   // Function that returns a discretization of the Cox direction for vector x in component comp.
   // Returns a matrix of dimension (cox_dir_n_elems, q), where cox_dir_n_elems is roughly equal to n_points and q is the length of x.
   // Input: 
@@ -329,7 +329,7 @@ arma::mat computeCoxDirection(arma::vec x, int comp, int n_points, int verbose){
 
 
 // [[Rcpp::export]]
-arma::cube findBestCoxDir(arma::mat cox_dir, arma::cube X_in, arma::vec beta, int k, int s, double log_d_eff_best, int verbose) {
+arma::cube findBestCoxDir(arma::mat& cox_dir, arma::cube& X_in, arma::vec& beta, int k, int s, double log_d_eff_best, int verbose) {
   // Function that returns the design that maximizes the D-efficiency.
   // Returns a cube of dimension (q, J, S) with a design that maximizes the value of the log D-efficiency.
   // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)

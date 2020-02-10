@@ -96,10 +96,35 @@ X3_2_opt = mnl_mixture_coord_ex(
 
 
 
+by_value = microbenchmark::microbenchmark(
+  X3_opt = mnl_mixture_coord_ex(
+    X = X3, 
+    beta = beta3, 
+    n_cox_points = 100, 
+    max_it = 10, 
+    verbose = 1, 
+    plot_designs = F
+  ),
+  times = 100)
+
+by_value
+by_value$time %>% mean()
 
 
 
+by_reference = microbenchmark::microbenchmark(
+  X3_opt = mnl_mixture_coord_ex(
+    X = X3, 
+    beta = beta3, 
+    n_cox_points = 100, 
+    max_it = 10, 
+    verbose = 1, 
+    plot_designs = F
+  ),
+  times = 100)
 
+by_reference
+by_reference$time %>% mean()
 
 
 
