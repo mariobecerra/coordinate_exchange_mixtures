@@ -66,6 +66,68 @@ plot_cox_direction = function(x_in, comp = NULL, n_points = 3){
 }
 
 
+# Main function
+mixture_coord_ex = function(
+  X, 
+  order = NULL, 
+  beta = NULL, 
+  model = "Gaussian", 
+  n_cox_points = 100, 
+  max_it = 50, 
+  plot_designs = F, 
+  verbose = 1){
+  
+  available_models = c("Gaussian", "MNL")
+  
+  # For martial match
+  pmatch_vec = sapply(available_models, 
+                      function(x) pmatch(model, x))
+  
+  model = names(which(!is.na(pmatch_vec)))
+  
+  if(all(is.null(pmatch_vec))){
+    # if no model is recognized
+    stop('Model unknown. Must be one of the following:\n\t',
+         paste(available_models, collapse = ", "))
+  } 
+  
+  
+  # Call Gaussian function
+  if(model == "Gaussian"){
+    
+    cat('Creating design for "', model, '" model of order ', order, '.\n', sep = "")
+    
+    if(!is.null(beta)) warning("beta was supplied but was ignored.")
+    out = mixture_coord_ex_gaussian(
+      X = X, 
+      order = order, 
+      n_cox_points = n_cox_points, 
+      max_it = max_it, 
+      plot_designs = plot_designs, 
+      verbose = verbose)
+  }
+  
+  # Call MNL function
+  if(model == "MNL"){
+    
+    cat('Creating design for "', model, '" model.\n', sep = "")
+    
+    if(!is.null(order)) warning("order was supplied but was ignored.")
+    
+    out = mixture_coord_ex_mnl(
+      X = X, 
+      beta = beta, 
+      n_cox_points = n_cox_points, 
+      max_it = max_it, 
+      plot_designs = plot_designs, 
+      verbose = verbose)
+  }
+  
+  return(out)
+  
+}
+
+
 
 ##########################################################
 ##########################################################

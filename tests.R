@@ -45,17 +45,19 @@ ggtern::grid.arrange(grobs = cox_direction_plots, ncol = 4)
 
 X_1 = create_random_initial_design_gaussian(9, 3, seed = 10)
 
-res_alg_order_1_1 = mixture_coord_ex_gaussian(
+res_alg_order_1_1 = mixture_coord_ex(
   X_1, 
   order = 1, 
+  model = "Gaussian",
   plot_designs = T,
   n_cox_points = 200)
 
 
 # Second degree
-res_alg_order_2_1 = mixture_coord_ex_gaussian(
+res_alg_order_2_1 = mixture_coord_ex(
   X_1, 
   order = 2, 
+  model = "Gaussian",
   plot_designs = T,
   n_cox_points = 1000)
 
@@ -63,9 +65,10 @@ res_alg_order_2_1 = mixture_coord_ex_gaussian(
 
 
 # Third degree
-res_alg_order_3_1 = mixture_coord_ex_gaussian(
+res_alg_order_3_1 = mixture_coord_ex(
   X_1, 
   order = 3, 
+  model = "Gaussian",
   plot_designs = T,
   n_cox_points = 1000)
 
@@ -78,17 +81,19 @@ res_alg_order_3_1 = mixture_coord_ex_gaussian(
 
 X_2 = create_random_initial_design_gaussian(15, 3, seed = 10)
 
-res_alg_order_1_2 = mixture_coord_ex_gaussian(
+res_alg_order_1_2 = mixture_coord_ex(
   X_2, 
   order = 1, 
+  model = "Gaussian",
   plot_designs = T,
   n_cox_points = 200)
 
 
 # Second degree
-res_alg_order_2_2 = mixture_coord_ex_gaussian(
+res_alg_order_2_2 = mixture_coord_ex(
   X_2, 
   order = 2, 
+  model = "Gaussian",
   plot_designs = T,
   n_cox_points = 1000)
 
@@ -96,9 +101,10 @@ res_alg_order_2_2 = mixture_coord_ex_gaussian(
 
 
 # Third degree
-res_alg_order_3_2 = mixture_coord_ex_gaussian(
+res_alg_order_3_2 = mixture_coord_ex(
   X_2, 
   order = 3, 
+  model = "Gaussian",
   plot_designs = T,
   n_cox_points = 1000)
 
@@ -121,9 +127,10 @@ beta2 = rep(0, (q*q*q + 5*q)/6)
 
 
 
-X2_opt2 = mixture_coord_ex_mnl(
+X2_opt2 = mixture_coord_ex(
   X = X2, 
   beta = beta2, 
+  model = "MNL",
   n_cox_points = 5, 
   max_it = 2, 
   verbose = 5,
@@ -146,9 +153,10 @@ X3 = create_random_initial_MNL_design(q, J, S, seed = 3)
 beta3 = rep(0, (q*q*q + 5*q)/6)
 beta3_2 = create_random_beta(q)
 
-X3_opt = mixture_coord_ex_mnl(
+X3_opt = mixture_coord_ex(
   X = X3, 
   beta = beta3, 
+  model = "MNL",
   n_cox_points = 100, 
   max_it = 10, 
   verbose = 1, 
@@ -156,9 +164,10 @@ X3_opt = mixture_coord_ex_mnl(
 )
 
 
-X3_2_opt = mixture_coord_ex_mnl(
+X3_2_opt = mixture_coord_ex(
   X = X3, 
   beta = beta3_2$beta, 
+  model = "MNL",
   n_cox_points = 100, 
   max_it = 10, 
   verbose = 1, 
@@ -178,20 +187,22 @@ X4 = create_random_initial_MNL_design(q, J, S, seed = 3)
 beta4 = rep(0, (q*q*q + 5*q)/6)
 beta4_2 = create_random_beta(q)
 
-X4_opt = mixture_coord_ex_mnl(
+X4_opt = mixture_coord_ex(
   X = X4, 
   beta = beta4, 
-  n_cox_points = 100, 
+  model = "MNL",
+  n_cox_points = 1000, 
   max_it = 10, 
   verbose = 1, 
   plot_designs = T
 )
 
 
-X4_2_opt = mixture_coord_ex_mnl(
+X4_2_opt = mixture_coord_ex(
   X = X4, 
   beta = beta4_2$beta, 
-  n_cox_points = 100, 
+  model = "MNL",
+  n_cox_points = 1000, 
   max_it = 10, 
   verbose = 1, 
   plot_designs = T
@@ -210,9 +221,10 @@ X5 = create_random_initial_MNL_design(q, J, S, seed = 3)
 beta5 = rep(0, (q*q*q + 5*q)/6)
 beta5_2 = create_random_beta(q)
 
-X5_opt = mixture_coord_ex_mnl(
+X5_opt = mixture_coord_ex(
   X = X5, 
   beta = beta5, 
+  model = "MNL",
   n_cox_points = 100, 
   max_it = 10, 
   verbose = 1, 
@@ -221,9 +233,10 @@ X5_opt = mixture_coord_ex_mnl(
 
 
 Sys.time()
-X5_2_opt = mixture_coord_ex_mnl(
+X5_2_opt = mixture_coord_ex(
   X = X5, 
   beta = beta5_2$beta, 
+  model = "MNL",
   n_cox_points = 1000, 
   max_it = 5, 
   verbose = 1, 
