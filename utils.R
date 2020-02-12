@@ -5,29 +5,8 @@
 library(Rcpp)
 sourceCpp("utils.cpp")
 
-create_random_initial_design = function(n_runs, q, seed = NULL){
-  X = matrix(rep(NA_real_, n_runs*q), nrow = n_runs)
-  
-  if(!is.null(seed)) set.seed(seed)
-  
-  for(i in 1:nrow(X)){
-    rands = runif(q)
-    
-    # rows in X sum to 1:
-    X[i,] = rands/sum(rands)
-  }
-  
-  return(X)
-}
-
-
-
-
 
 compute_cox_direction = function(x, comp, n_points = 11){
-  # Call C++ function and get unique rows
-  # cox_direction = unique(computeCoxDirection(x, comp, n_points))
-  
   # Call C++ function
   cox_direction = computeCoxDirection(x, comp, n_points, verbose = 0)
   
@@ -66,13 +45,7 @@ plot_cox_direction = function(x_in, comp = NULL, n_points = 3){
         mutate(comp = i)
     }) %>% 
       bind_rows()
-    
-    # out = cox_dirs %>% 
-    #   ggtern(aes(c1, c2, c3)) + 
-    #   geom_path(linetype = "dashed", aes(group = comp)) + 
-    #   theme_minimal() +
-    #   geom_point(data = tibble(x = x_in[1], y = x_in[2], z = x_in[3]))
-    
+ 
     out = cox_dirs %>% 
       ggplot(aes(c1, c2, c3)) +
       coord_tern() + 
@@ -86,29 +59,22 @@ plot_cox_direction = function(x_in, comp = NULL, n_points = 3){
 
 
 
-
-
-get_scheffe = function(X, order = 1){
-  X_m = getScheffe(X, order)
-  return(X_m)
-}
-
-
-
-
-get_scheffe_log_D_efficiency = function(X, order = 1){
-  # Wrapper function of C++ function
-  return(getScheffeLogDEfficiency(X, order))
-}
-
-
-coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_it = 50, seed = NULL, X = NULL, plot_designs = F, verbose = 1){
+create_random_initial_design_gaussian = function(n_runs, q, seed = NULL){
+  X = matrix(rep(NA_real_, n_runs*q), nrow = n_runs)
   
-  if(is.null(X)){
-    # If no initial design is provided, create a random starting design
-    X = create_random_initial_design(n_runs, q, seed)
+  if(!is.null(seed)) set.seed(seed)
+  
+  for(i in 1:nrow(X)){
+    rands = runif(q)
     
-  } 
+    # rows in X sum to 1:
+    X[i,] = rands/sum(rands)
+  }
+  
+  return(X)
+}
+
+mixture_coord_ex_gaussian = function(X, order = 1, n_cox_points = 100, max_it = 50, plot_designs = F, verbose = 1){
   
   n_runs = nrow(X)
   q = ncol(X)
@@ -121,19 +87,8 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
   }
   
   
-  if(!is.null(seed)) set.seed(seed)
-  
-  # Design matrix
-  # Scheffé model of first order
-  # X_m = get_scheffe(X, order = 1)
-  # Scheffé model of second order
-  # X_m = get_scheffe(X, order = 2)
-  # Scheffé model of third order
-  # X_m = get_scheffe(X, order = 3)
-  
-  
   # Coordinate exchanges:
-  X_result = mixtureCoordinateExchange(X, order, n_cox_points, max_it, verbose)
+  X_result = mixtureCoordinateExchangeGaussian(X, order, n_cox_points, max_it, verbose)
   
   out_list = list(
     X_orig = X_result$X_orig,
@@ -144,7 +99,7 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
   )
   
   if(plot_designs) {
-    if(q == 3) plot_result(out_list)
+    if(q == 3) plot_result_gaussian(out_list)
     else warning("Could not plot results because q != 3")
   }
   return(out_list)
@@ -153,8 +108,8 @@ coord_ex_mixt = function(n_runs = 10, q = 3, n_cox_points = 100, order = 1, max_
 
 
 
-plot_result = function(res_alg){
-  # res_alg: output of a call to coord_ex_mixt() function
+plot_result_gaussian = function(res_alg){
+  # res_alg: output of a call to mixture_coord_ex_gaussian() function
   
   ggtern::grid.arrange(
     res_alg$X_orig %>% 

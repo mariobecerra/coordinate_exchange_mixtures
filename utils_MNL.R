@@ -1,5 +1,5 @@
 
-mnl_mixture_coord_ex = function(X, beta, n_cox_points = 100, max_it = 50, plot_designs = F, verbose = 1){
+mixture_coord_ex_mnl = function(X, beta, n_cox_points = 100, max_it = 50, plot_designs = F, verbose = 1){
   # Performs the coordinate exchange algorithm for a Multinomial Logit Scheffé model.
   # X: 3 dimensional array with dimensions (q, J, S) where:
   #    q is the number of ingredient proportions
@@ -37,6 +37,11 @@ mnl_mixture_coord_ex = function(X, beta, n_cox_points = 100, max_it = 50, plot_d
   if(m != length(beta)) stop("Incompatible length in beta and q: beta must be of length (q^3 + 5*q)/6")
   
   # Call to C++ function
+  # Note: In the future use a C++ implementation of Brent's method like the following
+  # https://people.sc.fsu.edu/~jburkardt/cpp_src/brent/brent.html
+  # https://github.com/fditraglia/RcppBrent
+  # It has the implementation of the algorithm in Chapter 6 of Brent's book
+  # (Ch 6: Global Minimization Given an Upper Bound on the Second Derivative)
   X_result = mixtureCoordinateExchangeMNL(
     X_orig = X, 
     beta = beta, 
@@ -63,7 +68,7 @@ mnl_mixture_coord_ex = function(X, beta, n_cox_points = 100, max_it = 50, plot_d
 
 
 mnl_plot_result = function(res_alg){
-  # res_alg: output of a call to mnl_mixture_coord_ex() function.
+  # res_alg: output of a call to mixture_coord_ex_mnl() function.
   # It must be a design of 3 ingredients.
   
   dim_X = dim(res_alg$X_orig)

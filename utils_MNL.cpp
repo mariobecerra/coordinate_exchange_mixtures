@@ -9,214 +9,6 @@ using namespace arma;
 
 
 
-
-// [[Rcpp::export]]
-arma::mat getXs(arma::cube& X, int s){
-  // Function that returns the design matrix of choice set s.
-  // Final matrix is of dimension (J, m-1) with m = (q^3 + 5*q)/6
-  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
-  // Input should be a design cube X of dimensions (q, J, S) and integer s, corresponding to a choice set in 1 to S.
-  int q = X.n_rows;
-  int J = X.n_cols;
-  int m = (q*q*q + 5*q)/6;
-  
-  // Initialize array with zeros
-  arma::mat Xs(J, m-1, fill::zeros);
-  
-  // Column counter. Equation has three terms, so the final matrix is populated in three parts.
-  int col_counter = 0;
-  
-  // First part
-  for(int i = 0; i < q-1; i++){
-    for(int j = 0; j < J; j++){
-      // subtract 1 from s because it is 1-indexed
-      Xs(j, col_counter) = X(i, j, s-1);
-    }
-    col_counter++;
-  }
-  
-  // second part
-  for(int i = 0; i < q-1; i++){
-    for(int k = i+1; k < q; k++){
-      for(int j = 0; j < J; j++){
-        Xs(j, col_counter) = X(i, j, s-1)*X(k, j, s-1);
-      }
-      col_counter++;
-    }
-  }
-  
-  // third part
-  for(int i = 0; i < q-2; i++){
-    for(int k = i+1; k < q-1; k++){
-      for(int l = k+1; l < q; l++){
-        for(int j = 0; j < J; j++){
-          Xs(j, col_counter) = X(i, j, s-1)*X(k, j, s-1)*X(l, j, s-1);
-        }
-        col_counter++;
-      }
-    }
-  }
-
-  return Xs;
-}
-
-
-
-
-// [[Rcpp::export]]
-arma::vec getUs(arma::cube& X, arma::vec& beta, int s, arma::mat& Xs){
-  // Function that returns the utility vector of choice set s.
-  // Final vector is of length J.
-  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
-  // Input: 
-  //     X: design cube of dimensions (q, J, S) 
-  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
-  //     s: integer s, corresponding to a choice set in 1 to S.
-  //     Xs: design matrix of choice set s. Must be of dimension (J, m-1), with m = (q^3 + 5*q)/6
-  
-  int J = X.n_cols;
-  int q = X.n_rows;
-  
-  int m = Xs.n_cols + 1; // m = (q^3 + 5*q)/6
-  
-  // Check input dimensions
-  if(m != beta.n_elem) stop("Incompatible q in beta and X");
-  
-  // Create auxiliary vector
-  arma::vec beta2(m-1);
-  
-  // compute beta_i_star = beta_i - beta_q
-  for(int i = 0; i < q-1; i++){
-    beta2(i) = beta(i) - beta(q-1);
-  }
-  
-  for(int i = q-1; i < m-1; i++){
-    beta2(i) = beta(i+1);
-  }
-  
-  arma::vec Us(J);
-  
-  Us = Xs*beta2;
-  return Us;
-}
-
-
-// [[Rcpp::export]]
-arma::vec getPs(arma::cube& X, arma::vec& beta, int s, arma::mat& Xs){
-  // Function that returns the probability vector of choice set s, based on the softmax function.
-  // Final vector is of length J.
-  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
-  // Input: 
-  //     X: design cube of dimensions (q, J, S) 
-  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
-  //     s: integer s, corresponding to a choice set in 1 to S.
-  //     Xs: design matrix of choice set s. Must be of dimension (J, m-1), with m = (q^3 + 5*q)/6
-  
-  int J = X.n_cols;
-
-  arma::vec Us(J);
-  Us = getUs(X, beta, s, Xs);
-  
-  arma::vec exp_Ujs(J);
-  arma::vec P(J);
-  
-  // subtracting the maximum value to avoid numerical overflow
-  exp_Ujs = exp(Us - max(Us));
-  
-  double sum_exp_Ujs = sum(exp_Ujs);
-  
-  P = exp_Ujs/sum_exp_Ujs;
-  
-  // Check for numerical inestabilities
-  if(abs(sum(P) - 1) > 1e-10) warning("Sum may not be numerically equal to 1.");
-
-  return P;
-}
-
-
-
-
-
-// [[Rcpp::export]]
-arma::mat getInformationMatrix(arma::cube& X, arma::vec& beta){
-  // Function that returns the information matrix for design cube X and parameter vector beta.
-  // It is the sum of the information matrices of the S choice sets.
-  // Final matrix is of dimension (m-1, m-1), with m = (q^3 + 5*q)/6
-  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
-  // Input: 
-  //     X: design cube of dimensions (q, J, S) 
-  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
-  
-  int J = X.n_cols;
-  int S = X.n_elem/(X.n_cols*X.n_rows);
-  int m = beta.n_elem;
-  
-  arma::mat Xs(J, m-1);
-  arma::mat I(m-1, m-1, fill::zeros);
-  arma::mat identity(J, J, fill::eye);
-  arma::mat ps_ps_t(J, J);
-  arma::mat middle(J, J);
-  arma::vec ps;
-
-  // Compute information matrix for each choice set s, and sum.
-  for(int s = 1; s <= S; s++){
-    Xs = getXs(X, s);
-    ps = getPs(X, beta, s, Xs);;
-    ps_ps_t = ps*ps.t();
-    middle = ps_ps_t;
-    middle.diag() = ps_ps_t.diag() - ps;
-    I = I - (Xs.t())*middle*Xs;
-  }
-  return I;
-}
-
-
-
-
-// [[Rcpp::export]]
-double getLogDEfficiency(arma::cube& X, arma::vec& beta, int verbose){
-  // Function that returns the log D efficiency for design cube X and parameter vector beta.
-  // The D-optimality criterion seeks to maximize the determinant of the information matrix.
-  // This function computes the log determinant of the information matrix using a Choleski decomposition.
-  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
-  // Input: 
-  //     X: design cube of dimensions (q, J, S) 
-  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
-  //     verbose: integer that expresses the level of verbosity. Mainly used in other functions and too much useful by itself.
-  
-  double log_D_eff;
-  double half_log_det_I;
-  
-  int m = beta.n_elem;
-  arma::mat I(m-1, m-1, fill::zeros);
-  
-  I = getInformationMatrix(X, beta);
-  if(verbose >= 5) Rcout << "Information matrix. I = \n" << I << std::endl;
-  
-  arma::mat L;
-  try{
-    arma::mat L = chol(I);
-    half_log_det_I = sum(log(L.diag()));
-    // Don't know if I should scale or just return log determinant
-    // Right now it just returns the log determinant.
-    // This line scales it:
-    // log_D_eff = 2*half_log_det_I/I.n_cols - log(I.n_rows);
-    log_D_eff = 2*half_log_det_I;
-  }
-  catch(const std::runtime_error& e){
-    // I don't think this is the best way to handle the exception.
-    Rcout << "Error in Cholesky decomposition\n";
-    Rcout << "Information matrix:\n" << I << "\n";
-    Rcout << "X:\n" << X << "\n";
-    stop("Error in Cholesky decomposition with message: ", e.what(), "\n");
-  }
-  
-  return log_D_eff;
-}
-
-
-
-
 arma::vec removeElement(vec x, int ix){
   // Auxiliary function.
   // Given a vector x, returns a vector out without the element with index ix.
@@ -328,8 +120,224 @@ arma::mat computeCoxDirection(arma::vec& x, int comp, int n_points, int verbose)
 
 
 
+
+
+
+
+
+
+
 // [[Rcpp::export]]
-arma::cube findBestCoxDir(arma::mat& cox_dir, arma::cube& X_in, arma::vec& beta, int k, int s, double log_d_eff_best, int verbose) {
+arma::mat getXsMNL(arma::cube& X, int s){
+  // Function that returns the design matrix of choice set s.
+  // Final matrix is of dimension (J, m-1) with m = (q^3 + 5*q)/6
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input should be a design cube X of dimensions (q, J, S) and integer s, corresponding to a choice set in 1 to S.
+  int q = X.n_rows;
+  int J = X.n_cols;
+  int m = (q*q*q + 5*q)/6;
+  
+  // Initialize array with zeros
+  arma::mat Xs(J, m-1, fill::zeros);
+  
+  // Column counter. Equation has three terms, so the final matrix is populated in three parts.
+  int col_counter = 0;
+  
+  // First part
+  for(int i = 0; i < q-1; i++){
+    for(int j = 0; j < J; j++){
+      // subtract 1 from s because it is 1-indexed
+      Xs(j, col_counter) = X(i, j, s-1);
+    }
+    col_counter++;
+  }
+  
+  // second part
+  for(int i = 0; i < q-1; i++){
+    for(int k = i+1; k < q; k++){
+      for(int j = 0; j < J; j++){
+        Xs(j, col_counter) = X(i, j, s-1)*X(k, j, s-1);
+      }
+      col_counter++;
+    }
+  }
+  
+  // third part
+  for(int i = 0; i < q-2; i++){
+    for(int k = i+1; k < q-1; k++){
+      for(int l = k+1; l < q; l++){
+        for(int j = 0; j < J; j++){
+          Xs(j, col_counter) = X(i, j, s-1)*X(k, j, s-1)*X(l, j, s-1);
+        }
+        col_counter++;
+      }
+    }
+  }
+
+  return Xs;
+}
+
+
+
+
+// [[Rcpp::export]]
+arma::vec getUsMNL(arma::cube& X, arma::vec& beta, int s, arma::mat& Xs){
+  // Function that returns the utility vector of choice set s.
+  // Final vector is of length J.
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     X: design cube of dimensions (q, J, S) 
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
+  //     s: integer s, corresponding to a choice set in 1 to S.
+  //     Xs: design matrix of choice set s. Must be of dimension (J, m-1), with m = (q^3 + 5*q)/6
+  
+  int J = X.n_cols;
+  int q = X.n_rows;
+  
+  int m = Xs.n_cols + 1; // m = (q^3 + 5*q)/6
+  
+  // Check input dimensions
+  if(m != beta.n_elem) stop("Incompatible q in beta and X");
+  
+  // Create auxiliary vector
+  arma::vec beta2(m-1);
+  
+  // compute beta_i_star = beta_i - beta_q
+  for(int i = 0; i < q-1; i++){
+    beta2(i) = beta(i) - beta(q-1);
+  }
+  
+  for(int i = q-1; i < m-1; i++){
+    beta2(i) = beta(i+1);
+  }
+  
+  arma::vec Us(J);
+  
+  Us = Xs*beta2;
+  return Us;
+}
+
+
+// [[Rcpp::export]]
+arma::vec getPsMNL(arma::cube& X, arma::vec& beta, int s, arma::mat& Xs){
+  // Function that returns the probability vector of choice set s, based on the softmax function.
+  // Final vector is of length J.
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     X: design cube of dimensions (q, J, S) 
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
+  //     s: integer s, corresponding to a choice set in 1 to S.
+  //     Xs: design matrix of choice set s. Must be of dimension (J, m-1), with m = (q^3 + 5*q)/6
+  
+  int J = X.n_cols;
+
+  arma::vec Us(J);
+  Us = getUsMNL(X, beta, s, Xs);
+  
+  arma::vec exp_Ujs(J);
+  arma::vec P(J);
+  
+  // subtracting the maximum value to avoid numerical overflow
+  exp_Ujs = exp(Us - max(Us));
+  
+  double sum_exp_Ujs = sum(exp_Ujs);
+  
+  P = exp_Ujs/sum_exp_Ujs;
+  
+  // Check for numerical inestabilities
+  if(abs(sum(P) - 1) > 1e-10) warning("Sum may not be numerically equal to 1.");
+
+  return P;
+}
+
+
+
+
+
+// [[Rcpp::export]]
+arma::mat getInformationMatrixMNL(arma::cube& X, arma::vec& beta){
+  // Function that returns the information matrix for design cube X and parameter vector beta.
+  // It is the sum of the information matrices of the S choice sets.
+  // Final matrix is of dimension (m-1, m-1), with m = (q^3 + 5*q)/6
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     X: design cube of dimensions (q, J, S) 
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
+  
+  int J = X.n_cols;
+  int S = X.n_elem/(X.n_cols*X.n_rows);
+  int m = beta.n_elem;
+  
+  arma::mat Xs(J, m-1);
+  arma::mat I(m-1, m-1, fill::zeros);
+  arma::mat identity(J, J, fill::eye);
+  arma::mat ps_ps_t(J, J);
+  arma::mat middle(J, J);
+  arma::vec ps;
+
+  // Compute information matrix for each choice set s, and sum.
+  for(int s = 1; s <= S; s++){
+    Xs = getXsMNL(X, s);
+    ps = getPsMNL(X, beta, s, Xs);;
+    ps_ps_t = ps*ps.t();
+    middle = ps_ps_t;
+    middle.diag() = ps_ps_t.diag() - ps;
+    I = I - (Xs.t())*middle*Xs;
+  }
+  return I;
+}
+
+
+
+
+// [[Rcpp::export]]
+double getLogDEfficiencyMNL(arma::cube& X, arma::vec& beta, int verbose){
+  // Function that returns the log D efficiency for design cube X and parameter vector beta.
+  // The D-optimality criterion seeks to maximize the determinant of the information matrix.
+  // This function computes the log determinant of the information matrix using a Choleski decomposition.
+  // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
+  // Input: 
+  //     X: design cube of dimensions (q, J, S) 
+  //     beta: parameter vector. Must be of length m, with m = (q^3 + 5*q)/6
+  //     verbose: integer that expresses the level of verbosity. Mainly used in other functions and too much useful by itself.
+  
+  double log_D_eff;
+  double half_log_det_I;
+  
+  int m = beta.n_elem;
+  arma::mat I(m-1, m-1, fill::zeros);
+  
+  I = getInformationMatrixMNL(X, beta);
+  if(verbose >= 5) Rcout << "Information matrix. I = \n" << I << std::endl;
+  
+  arma::mat L;
+  try{
+    arma::mat L = chol(I);
+    half_log_det_I = sum(log(L.diag()));
+    // Don't know if I should scale or just return log determinant
+    // Right now it just returns the log determinant.
+    // This line scales it:
+    // log_D_eff = 2*half_log_det_I/I.n_cols - log(I.n_rows);
+    log_D_eff = 2*half_log_det_I;
+  }
+  catch(const std::runtime_error& e){
+    // I don't think this is the best way to handle the exception.
+    Rcout << "Error in Cholesky decomposition\n";
+    Rcout << "Information matrix:\n" << I << "\n";
+    Rcout << "X:\n" << X << "\n";
+    stop("Error in Cholesky decomposition with message: ", e.what(), "\n");
+  }
+  
+  return log_D_eff;
+}
+
+
+
+
+
+
+// [[Rcpp::export]]
+arma::cube findBestCoxDirMNL(arma::mat& cox_dir, arma::cube& X_in, arma::vec& beta, int k, int s, double log_d_eff_best, int verbose) {
   // Function that returns the design that maximizes the D-efficiency.
   // Returns a cube of dimension (q, J, S) with a design that maximizes the value of the log D-efficiency.
   // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
@@ -365,7 +373,7 @@ arma::cube findBestCoxDir(arma::mat& cox_dir, arma::cube& X_in, arma::vec& beta,
       Rcout << "\tj = " << j << " (of " << n_cox_points << "), "; 
     }
     
-    log_d_eff_j = getLogDEfficiency(X, beta, verbose);
+    log_d_eff_j = getLogDEfficiencyMNL(X, beta, verbose);
     
     if(verbose >= 4){
       Rcout << "log_d_eff_j = "  << log_d_eff_j << "\n";
@@ -436,7 +444,7 @@ Rcpp::List mixtureCoordinateExchangeMNL(arma::cube X_orig, arma::vec beta, int n
   arma::vec x(q);
 
 
-  double log_d_eff_orig = getLogDEfficiency(X, beta, verbose);
+  double log_d_eff_orig = getLogDEfficiencyMNL(X, beta, verbose);
   double log_d_eff_best = log_d_eff_orig;
   double log_d_eff_aux = -1e308; // -Inf
 
@@ -467,8 +475,8 @@ Rcpp::List mixtureCoordinateExchangeMNL(arma::cube X_orig, arma::vec beta, int n
           }
           
           cox_dir = computeCoxDirection(x, i+1, n_cox_points, verbose);
-          X = findBestCoxDir(cox_dir, X, beta, k, s, log_d_eff_best, verbose);
-          log_d_eff_best = getLogDEfficiency(X, beta, verbose);
+          X = findBestCoxDirMNL(cox_dir, X, beta, k, s, log_d_eff_best, verbose);
+          log_d_eff_best = getLogDEfficiencyMNL(X, beta, verbose);
 
           if(verbose >= 2) Rcout << "Log D-eff: " << log_d_eff_best << std::endl;
             

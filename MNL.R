@@ -51,7 +51,7 @@ X2_opt = mixtureCoordinateExchangeMixtureMNL(
 )
 
   
-X2_opt2 = mnl_mixture_coord_ex(
+X2_opt2 = mixture_coord_ex_mnl(
   X = X2, 
   beta = beta2, 
   n_cox_points = 5, 
@@ -75,7 +75,7 @@ X3 = create_random_initial_MNL_design(q, J, S, seed = 3)
 beta3 = rep(0, (q*q*q + 5*q)/6)
 beta3_2 = create_random_beta(q)
 
-X3_opt = mnl_mixture_coord_ex(
+X3_opt = mixture_coord_ex_mnl(
   X = X3, 
   beta = beta3, 
   n_cox_points = 100, 
@@ -85,7 +85,7 @@ X3_opt = mnl_mixture_coord_ex(
 )
 
 
-X3_2_opt = mnl_mixture_coord_ex(
+X3_2_opt = mixture_coord_ex_mnl(
   X = X3, 
   beta = beta3_2$beta, 
   n_cox_points = 100, 
@@ -96,36 +96,36 @@ X3_2_opt = mnl_mixture_coord_ex(
 
 
 
-by_value = microbenchmark::microbenchmark(
-  X3_opt = mnl_mixture_coord_ex(
-    X = X3, 
-    beta = beta3, 
-    n_cox_points = 100, 
-    max_it = 10, 
-    verbose = 1, 
-    plot_designs = F
-  ),
-  times = 100)
-
-by_value
-by_value$time %>% mean()
 
 
 
-by_reference = microbenchmark::microbenchmark(
-  X3_opt = mnl_mixture_coord_ex(
-    X = X3, 
-    beta = beta3, 
-    n_cox_points = 100, 
-    max_it = 10, 
-    verbose = 1, 
-    plot_designs = F
-  ),
-  times = 100)
 
-by_reference
-by_reference$time %>% mean()
+q = 5
+J = 15
+S = 10
+X4 = create_random_initial_MNL_design(q, J, S, seed = 3)
+beta4 = rep(0, (q*q*q + 5*q)/6)
+beta4_2 = create_random_beta(q)
+
+X4_opt = mixture_coord_ex_mnl(
+  X = X4, 
+  beta = beta4, 
+  n_cox_points = 100, 
+  max_it = 10, 
+  verbose = 1, 
+  plot_designs = T
+)
 
 
+Sys.time()
+X4_2_opt = mixture_coord_ex_mnl(
+  X = X4, 
+  beta = beta4_2$beta, 
+  n_cox_points = 1000, 
+  max_it = 5, 
+  verbose = 1, 
+  plot_designs = T
+)
+Sys.time()
 
 

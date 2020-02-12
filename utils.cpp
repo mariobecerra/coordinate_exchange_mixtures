@@ -6,182 +6,10 @@
 using namespace Rcpp;
 using namespace arma;
 
-// This is a simple example of exporting a C++ function to R. You can
-// source this function into an R session using the Rcpp::sourceCpp 
-// function (or via the Source button on the editor toolbar). Learn
-// more about Rcpp at:
-//
-//   http://www.rcpp.org/
-//   http://adv-r.had.co.nz/Rcpp.html
-//   http://gallery.rcpp.org/
 
-
-
-// [[Rcpp::export]]
-arma::mat getScheffeOrder2(arma::mat& X){
-  int q = X.n_cols;
-  int n = X.n_rows;
-  int n_col_X_m = q + (q-1)*q/2;
-  arma::mat X_m(n, n_col_X_m);
-  
-  // Copy X matrix into first q columns of X_m 
-  for(int i = 0; i < n; i++){
-    for(int j = 0; j < q; j++){
-      X_m(i,j) = X(i,j);
-    }
-  }
-  
-  // // Fill rest of matrix column-wise
-  // int k = q-1;
-  // for(int i = 0; i < (q-1); i++){
-  //   for(int j = i+1; j < q; j++){
-  //     k = k+1;
-  //     X_m(_,k) = X(_,i)*X(_,j);
-  //   }
-  // }
-  
-  // Fill rest of matrix element-wise
-  int k = q-1;
-  for(int i = 0; i < (q-1); i++){
-    for(int j = i+1; j < q; j++){
-      k = k+1;
-      for(int row = 0; row < n; row++){
-        X_m(row,k) = X(row,i)*X(row,j);
-      }
-    }
-  }
-  
-  return X_m;
-}
-
-
-
-// [[Rcpp::export]]
-arma::mat getScheffeOrder3(arma::mat& X){
-  int q = X.n_cols;
-  int n = X.n_rows;
-  
-  // This probably slows down the whole thing
-  arma::mat X_ord_2 = getScheffeOrder2(X);
-  
-  int n_col_X_ord_2 = X_ord_2.n_cols;
-  
-  int n_col_X_m = X_ord_2.n_cols;
-  // compute number of columns in X_m
-  // There's a formula to find this number, but I'll work it out later.
-  for(int i = 0; i < (q-2); i++){
-    for(int j = (i+1); j < (q-1); j++){
-      for(int k = (j+1); k < q; k++){
-        n_col_X_m++;
-      }  
-    }
-  }
-  
-  arma::mat X_m(n, n_col_X_m);
-  
-  // Copy X_ord_2 matrix into first q columns of X_m
-  for(int i = 0; i < n; i++){
-    for(int j = 0; j < n_col_X_ord_2; j++){
-      X_m(i,j) = X_ord_2(i,j);
-    }
-  }
-  
-  // // Fill rest of matrix column-wise
-  int l = q - 1;
-  for(int i = 0; i < (q-1); i++){
-    for(int j = i+1; j < q; j++){
-      l++;
-      for(int row = 0; row < n; row++){
-        X_m(row,l) = X(row,i)*X(row,j);
-      }
-    }
-  }
-  
-  l = X_ord_2.n_cols - 1;
-  for(int i = 0; i < (q - 2); i++){
-    for(int j = i + 1; j < (q - 1); j++){
-      for(int k = j + 1; k < q; k++){
-        l++;
-        for(int row = 0; row < n; row++){
-          X_m(row,l) = X(row,i)*X(row,j)*X(row,k);
-        }
-      }  
-    }
-  }
-  
-  
-  return X_m;
-}
-
-
-
-
-
-
-
-
-// [[Rcpp::export]]
-arma::mat getScheffe(arma::mat& X, int order){
-  
-  // not the most elegant, but works
-  bool flag = (order != 1 & order != 2 & order != 3);
-  
-  if(flag){
-    stop("Inadmissible value for order. Must be 1, 2 or 3");
-  }
-  
-  arma::mat X_m;
-  
-  if(order == 1)  X_m = X;
-  else{
-    if(order == 2){
-      X_m = getScheffeOrder2(X);
-    } else {
-      X_m = getScheffeOrder3(X);
-    }
-  }
-  // arma::mat_out = as<mat>(X_m);
-  // return as<mat>(X_m);
-  return X_m;
-}
-
-
-
-
-// [[Rcpp::export]]
-double getScheffeLogDEfficiency(arma::mat& X, int order){
-  arma::mat X_m = getScheffe(X, order);
-  arma::mat X_mT = trans(X_m);
-  arma::mat I = X_mT * X_m; // Information matrix
-  double log_D_eff;
-  
-  // Attempt to do a Cholesky decomposition on the information matrix
-  arma::mat L;
-  double log_det_I;
-  try{
-    L = chol(I);
-    // Compute the determinant of information matrix using the decomposition
-    log_det_I = 2*sum(log(L.diag()));
-    log_D_eff = log_det_I/X_m.n_cols - log(X_m.n_rows);
-  }
-  catch(const std::runtime_error& e){
-    // If Cholesky decomposition fails, it is likely because information matrix
-    // was not numerically positive definite.
-    // If this happens, it is probably because a numerical inestability.
-    // The function then returns the log D efficiency as a big negative number, this 
-    // way the algorithm does nothing in this iteration because  the algorithm thinks
-    // there was no improvement when swapping the proportions.
-    Rcout << "Information matrix:\n" << I << "\n";
-    Rcout << "X:\n" << X << "\n";
-    Rcout << "Error in Cholesky decomposition with message: " << e.what() << std::endl;
-    log_D_eff = -10000;
-    Rcout << "Returning log_D_eff = " << log_D_eff << std::endl;
-  }
-  
-  return log_D_eff;
-}
-
-
+////////////////////////////////////////
+// Auxiliary functions
+////////////////////////////////////////
 
 
 arma::vec removeElement(vec x, int ix){
@@ -204,54 +32,6 @@ arma::vec removeElement(vec x, int ix){
   }
   return(out);
 }
-
-
-
-
-// [[Rcpp::export]]
-arma::mat findBestCoxDir(arma::mat& cox_dir, arma::mat& X_in, int k, int order, double log_d_eff_best) {
-  arma::mat X = X_in;
-  int n_col_X = X.n_cols;
-  arma::vec x_k(n_col_X);
-  
-  double log_d_eff_j;
-  int n_cox_points = cox_dir.n_rows;
-  for(int j = 0; j < n_cox_points; j++){
-    
-    // In Rcpp: x_k = X(k-1,_);
-    for(int elem = 0; elem < n_col_X; elem++){
-      x_k(elem) = X(k-1, elem);  
-    }
-    
-    // In Rcpp: X(k-1,_) = cox_dir(j, _);
-    for(int elem = 0; elem < n_col_X; elem++){
-      X(k-1, elem) = cox_dir(j, elem);
-    }
-    
-    log_d_eff_j = getScheffeLogDEfficiency(X, order);
-    
-    // If new D-efficiency is better, then keep the new one.
-    if(log_d_eff_j > log_d_eff_best) {
-      // This design has a better D-efficiency, so we keep the design and update the best value
-      log_d_eff_best = log_d_eff_j;
-    } else{
-      // This design does not have a better D-efficiency, so we return to the old design.
-      // In Rcpp: X(k-1,_) = x_k;
-      for(int elem = 0; elem < n_col_X; elem++){
-        X(k-1,elem) = x_k(elem);
-      }
-      
-    }
-  }
-  
-  return X;
-}
-
-
-
-
-
-
 
 
 
@@ -339,119 +119,204 @@ arma::mat computeCoxDirection(arma::vec& x, int comp, int n_points, int verbose)
 
 
 
+////////////////////////////////////////
+// Gaussian model
+////////////////////////////////////////
 
-
-
-arma::vec removeElementOld(vec x, int ix){
-  int n = x.n_elem;
-  vec out;
-  if(ix != 0 & ix != n-1){
-    out = join_vert(x.subvec(0, ix-1), x.subvec(ix + 1, n-1)); 
-  } else{
-    if(ix == 0){
-      out = x.subvec(1, n-1); 
-    } else{
-      out = x.subvec(0, n-2); 
+arma::mat getScheffeGaussianOrder2(arma::mat& X){
+  int q = X.n_cols;
+  int n = X.n_rows;
+  int n_col_X_m = q + (q-1)*q/2;
+  arma::mat X_m(n, n_col_X_m);
+  
+  // Copy X matrix into first q columns of X_m 
+  for(int i = 0; i < n; i++){
+    for(int j = 0; j < q; j++){
+      X_m(i,j) = X(i,j);
     }
   }
   
-  return(out);
+  // Fill rest of matrix element-wise
+  int k = q-1;
+  for(int i = 0; i < (q-1); i++){
+    for(int j = i+1; j < q; j++){
+      k = k+1;
+      for(int row = 0; row < n; row++){
+        X_m(row,k) = X(row,i)*X(row,j);
+      }
+    }
+  }
+  
+  return X_m;
 }
 
 
-// [[Rcpp::export]]
-arma::mat computeCoxDirectionOld(NumericVector& x, int comp, int n_points){
+
+arma::mat getScheffeGaussianOrder3(arma::mat& X){
+  int q = X.n_cols;
+  int n = X.n_rows;
   
-  int i = comp - 1;
-  int q = x.length();
+  // This probably slows down the whole thing
+  arma::mat X_ord_2 = getScheffeGaussianOrder2(X);
   
-  //   # points in Cox's direction
-  //   seq_points = seq(from = 0, to = 1, length.out = n_points)
-  vec seq_points = linspace<vec>(0, 1, n_points);
+  int n_col_X_ord_2 = X_ord_2.n_cols;
   
-  //   diffs = seq_points - x[i]
-  vec diffs = seq_points - x(i);
+  int n_col_X_m = X_ord_2.n_cols;
+  // compute number of columns in X_m
+  // There's a formula to find this number, but I'll work it out later.
+  for(int i = 0; i < (q-2); i++){
+    for(int j = (i+1); j < (q-1); j++){
+      for(int k = (j+1); k < q; k++){
+        n_col_X_m++;
+      }  
+    }
+  }
   
-  // ix1 = which.min(abs(diffs))
-  int ix1 = index_min(abs(diffs));
+  arma::mat X_m(n, n_col_X_m);
   
-  //   cox_direction_aux = seq_points - diffs[ix1]
-  //   cox_direction_aux2 = cox_direction_aux[-ix1]
-  //   betw_0_1 = cox_direction_aux2 >= 0 & cox_direction_aux2 <= 1
-  //   cox_direction_aux3 = c(0, cox_direction_aux2[betw_0_1], 1)
-  vec cox_direction_aux = seq_points - diffs(ix1);
+  // Copy X_ord_2 matrix into first q columns of X_m
+  for(int i = 0; i < n; i++){
+    for(int j = 0; j < n_col_X_ord_2; j++){
+      X_m(i,j) = X_ord_2(i,j);
+    }
+  }
   
-  // vec cox_direction_aux2(cox_direction_aux.n_elem - 1);
-  // // copy all elements of cox_direction_aux except the one with index ix1
-  // // the equivalent in R: cox_direction_aux2 = cox_direction_aux[-ix1]
-  // // could not find a simpler way to do it with Armadillo
-  // int aux_int = 0;
-  // for(int j = 0; j < cox_direction_aux.n_elem - 1; j++){
-  //   if(j != ix1) cox_direction_aux2(j) = cox_direction_aux(aux_int);
-  //   aux_int++;
-  // }
-  vec cox_direction_aux2 = removeElementOld(cox_direction_aux, ix1);
-  
-  uvec bigger_zero = find(cox_direction_aux2 >= 0);
-  uvec less_one = find(cox_direction_aux2 <= 1);
-  uvec betw_0_1 = intersect(bigger_zero, less_one);
-  vec cox_direction_aux3 = join_vert(zeros(1), cox_direction_aux2.elem(betw_0_1), ones(1));
-  
-  int cox_dir_n_elems = cox_direction_aux3.n_elem;
-  // if repeated elements
-  // if(cox_direction_aux3(1) == 0) cox_direction_aux3 = removeElement(cox_direction_aux3, 1);
-  // if(cox_direction_aux3(cox_dir_n_elems-2) == 1) cox_direction_aux3 = removeElement(cox_direction_aux3, cox_dir_n_elems-2);
-  
-  // cox_direction = matrix(rep(NA_real_, q*length(cox_direction_aux3)), ncol = q)
-  arma::mat cox_direction = arma::mat(cox_dir_n_elems, q, fill::randu);
-  
-  
-  
-  // cox_direction[,i] = cox_direction_aux3
-  cox_direction.col(i) = cox_direction_aux3;
-  
-  
-  // deltas = cox_direction_aux3 - x[i]
-  vec deltas = cox_direction_aux3 - x(i);
-  
-  for(int n = 0; n < cox_dir_n_elems; n++){
-    // recompute proportions:
-    vec setDiff_aux = linspace<vec>(0, q-1, q);
-    vec setDiff = removeElementOld(setDiff_aux, i);
-    int j;
-    double res;
-    for(int j_aux = 0; j_aux < setDiff.n_elem; j_aux++){
-      j = setDiff(j_aux);
-      // In case it's a corner case, i.e., x[i] = 1
-      if(abs(1 - x(i)) < 1e-16) res = (1 - cox_direction(n, i))/(q-1);
-      else{
-        res = x(j) - deltas(n)*x(j)/(1 - x(i));
+  // // Fill rest of matrix column-wise
+  int l = q - 1;
+  for(int i = 0; i < (q-1); i++){
+    for(int j = i+1; j < q; j++){
+      l++;
+      for(int row = 0; row < n; row++){
+        X_m(row,l) = X(row,i)*X(row,j);
       }
-      // if(res < -1e-10 | )
-      cox_direction(n, j) = res;
-      j++;
-    } // end j
+    }
+  }
+  
+  l = X_ord_2.n_cols - 1;
+  for(int i = 0; i < (q - 2); i++){
+    for(int j = i + 1; j < (q - 1); j++){
+      for(int k = j + 1; k < q; k++){
+        l++;
+        for(int row = 0; row < n; row++){
+          X_m(row,l) = X(row,i)*X(row,j)*X(row,k);
+        }
+      }  
+    }
+  }
+  
+  
+  return X_m;
+}
+
+
+
+
+
+arma::mat getScheffeGaussian(arma::mat& X, int order){
+  
+  // not the most elegant, but works
+  bool flag = (order != 1 & order != 2 & order != 3);
+  
+  if(flag){
+    stop("Inadmissible value for order. Must be 1, 2 or 3");
+  }
+  
+  arma::mat X_m;
+  
+  if(order == 1)  X_m = X;
+  else{
+    if(order == 2){
+      X_m = getScheffeGaussianOrder2(X);
+    } else {
+      X_m = getScheffeGaussianOrder3(X);
+    }
+  }
+  // arma::mat_out = as<mat>(X_m);
+  // return as<mat>(X_m);
+  return X_m;
+}
+
+
+
+
+double getLogDEfficiencyGaussian(arma::mat& X, int order){
+  arma::mat X_m = getScheffeGaussian(X, order);
+  arma::mat X_mT = trans(X_m);
+  arma::mat I = X_mT * X_m; // Information matrix
+  double log_D_eff;
+  
+  // Attempt to do a Cholesky decomposition on the information matrix
+  arma::mat L;
+  double log_det_I;
+  try{
+    L = chol(I);
+    // Compute the determinant of information matrix using the decomposition
+    log_det_I = 2*sum(log(L.diag()));
+    log_D_eff = log_det_I/X_m.n_cols - log(X_m.n_rows);
+  }
+  catch(const std::runtime_error& e){
+    // If Cholesky decomposition fails, it is likely because information matrix
+    // was not numerically positive definite.
+    // If this happens, it is probably because a numerical inestability.
+    // The function then returns the log D efficiency as a big negative number, this 
+    // way the algorithm does nothing in this iteration because  the algorithm thinks
+    // there was no improvement when swapping the proportions.
+    Rcout << "Information matrix:\n" << I << "\n";
+    Rcout << "X:\n" << X << "\n";
+    Rcout << "Error in Cholesky decomposition with message: " << e.what() << std::endl;
+    log_D_eff = -10000;
+    Rcout << "Returning log_D_eff = " << log_D_eff << std::endl;
+  }
+  
+  return log_D_eff;
+}
+
+
+
+
+arma::mat findBestCoxDirGaussian(arma::mat& cox_dir, arma::mat& X_in, int k, int order, double log_d_eff_best) {
+  arma::mat X = X_in;
+  int n_col_X = X.n_cols;
+  arma::vec x_k(n_col_X);
+  
+  double log_d_eff_j;
+  int n_cox_points = cox_dir.n_rows;
+  for(int j = 0; j < n_cox_points; j++){
     
-    if(any(cox_direction.row(n) < -1e-10 || cox_direction.row(n) > 1 + 1e10)) {
-      cox_direction.print();
-      stop("Error while computing Cox direction. Value out of bounds.\n");
+    // In Rcpp: x_k = X(k-1,_);
+    for(int elem = 0; elem < n_col_X; elem++){
+      x_k(elem) = X(k-1, elem);  
+    }
+    
+    // In Rcpp: X(k-1,_) = cox_dir(j, _);
+    for(int elem = 0; elem < n_col_X; elem++){
+      X(k-1, elem) = cox_dir(j, elem);
+    }
+    
+    log_d_eff_j = getLogDEfficiencyGaussian(X, order);
+    
+    // If new D-efficiency is better, then keep the new one.
+    if(log_d_eff_j > log_d_eff_best) {
+      // This design has a better D-efficiency, so we keep the design and update the best value
+      log_d_eff_best = log_d_eff_j;
+    } else{
+      // This design does not have a better D-efficiency, so we return to the old design.
+      // In Rcpp: X(k-1,_) = x_k;
+      for(int elem = 0; elem < n_col_X; elem++){
+        X(k-1,elem) = x_k(elem);
+      }
       
     }
   }
-  // cox_direction = unique(cox_direction)
-  return(cox_direction);
+  
+  return X;
 }
 
 
 
 
-
-
-
-
-
 // [[Rcpp::export]]
-Rcpp::List mixtureCoordinateExchange(arma::mat X_orig, int order, int n_cox_points, int max_it, int verbose){
+Rcpp::List mixtureCoordinateExchangeGaussian(arma::mat X_orig, int order, int n_cox_points, int max_it, int verbose){
   // Performs the coordinate exchange algorithm for a Multinomial Logit Scheffé model.
   // Based on a special cubic Scheffé model as described in Ruseckaite, et al - Bayesian D-optimal choice designs for mixtures (2017)
   // X: armadillo matrix with dimensions (n, q) where:
@@ -488,7 +353,7 @@ Rcpp::List mixtureCoordinateExchange(arma::mat X_orig, int order, int n_cox_poin
   arma::vec x(q);
   
   
-  double log_d_eff_orig = getScheffeLogDEfficiency(X, order);
+  double log_d_eff_orig = getLogDEfficiencyGaussian(X, order);
   double log_d_eff_best = log_d_eff_orig;
   double log_d_eff_aux = -1e308; // -Inf
   
@@ -514,8 +379,8 @@ Rcpp::List mixtureCoordinateExchange(arma::mat X_orig, int order, int n_cox_poin
         }
         
         cox_dir = computeCoxDirection(x, i+1, n_cox_points, verbose);
-        X = findBestCoxDir(cox_dir, X, k, order, log_d_eff_best);
-        log_d_eff_best = getScheffeLogDEfficiency(X, order);
+        X = findBestCoxDirGaussian(cox_dir, X, k, order, log_d_eff_best);
+        log_d_eff_best = getLogDEfficiencyGaussian(X, order);
         
         if(verbose >= 2) Rcout << "Log D-eff: " << log_d_eff_best << std::endl;
         
@@ -553,5 +418,16 @@ Rcpp::List mixtureCoordinateExchange(arma::mat X_orig, int order, int n_cox_poin
   );
   
 } // end function
+
+
+
+////////////////////////////////////////
+// Multinomial logit (MNL) model
+////////////////////////////////////////
+
+
+
+
+
 
 
